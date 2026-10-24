@@ -1,0 +1,13 @@
+{
+  "name": "misa-aws-demo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev:api": "pnpm --filter seller-api dev",
+    "dev:onboarding": "pnpm --filter seller-onboarding dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}
