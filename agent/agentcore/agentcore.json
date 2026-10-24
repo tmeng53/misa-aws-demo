@@ -52,7 +52,7 @@
         }
       ],
       "autoPayment": true,
-      "defaultSpendLimit": "1.00",
+      "defaultSpendLimit": "2.00",
       "paymentToolAllowlist": [
         "http_request"
       ],

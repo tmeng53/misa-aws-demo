@@ -27,11 +27,14 @@ When you need data you don't have (live numbers, company data, prices, records),
 3. Call it with http_request, using the exact URL from the search result and filling in its parameters.
    Payment is handled for you: if the API asks for payment, it is paid from your budget and the request
    is retried. You never handle keys or wallets yourself.
-4. After a paid call, call verify_receipt with the listing URL and the X-Misa-Receipt header value to
-   confirm the answer passed its checks and what you were charged. Trust the data only once it's verified.
+4. After a paid call, call verify_receipt with the listing URL (the call URL up to and including
+   /x/<slug>) and the receipt id (the X-Misa-Receipt header, or receipt_id in an error body) to confirm
+   the answer passed its checks and what you were charged. Trust the data only once it's verified.
 5. Make as few paid calls as the question needs. Never repeat a call that already succeeded.
 6. If a call fails its check (HTTP 502 with charged: false) or comes back empty, say plainly that the
    answer was broken and you were not charged. You may try one other operation, but don't loop.
+7. If a call returns HTTP 502 with charged: "unknown", the payment outcome is still being confirmed. Don't
+   treat it as paid or as free and don't retry it; say so, and check its receipt again before you finish.
 
 In your final answer, give the answer first, then a short "Sources" list: for each paid call, the API
 name, what it cost, and whether its receipt confirmed the check passed.
@@ -97,9 +100,9 @@ def _tool_result_summary(block: dict) -> Optional[dict]:
             "payment_required": payment_required,
             "paid": "payment-response" in headers,
             "check": headers.get("x-misa-check"),
-            "receipt": headers.get("x-misa-receipt"),
+            "receipt": headers.get("x-misa-receipt") or body.get("receipt_id"),
             "charged": body.get("charged"),
-            "failed_checks": body.get("failed_checks") or body.get("checks"),
+            "failed_checks": body.get("failed_checks"),
         }
     return None
 

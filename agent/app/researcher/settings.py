@@ -55,5 +55,5 @@ class Settings:
             misa_url=(_env("MISA_GATEWAY_URL") or "").rstrip("/") or None,
             payment_manager_arn=_env("PAYMENT_MANAGER_ARN") or _payment_manager_arn_from_cli_env(),
             payment_user_id=_env("PAYMENT_USER_ID") or "demo-buyer",
-            max_price_per_call_usd=Decimal(_env("MAX_PRICE_PER_CALL_USD") or "0.05"),
+            max_price_per_call_usd=Decimal(_env("MAX_PRICE_PER_CALL_USD") or "1.00"),
         )

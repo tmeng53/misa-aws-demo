@@ -5,7 +5,7 @@
    passing the session and wallet ids as headers. The agent cannot spend outside that session.
 3. Prints what the agent searched, what it paid, the answer, and how much of the budget is left.
 
-    RUNTIME_ARN=... python scripts/run_demo.py "Which software companies report earnings next week, and what does the consensus expect?"
+    RUNTIME_ARN=... python scripts/run_demo.py --budget 2.00 "Which software companies report earnings next week, and what does the consensus expect?"
 """
 
 import argparse
@@ -74,6 +74,8 @@ def render(event: dict) -> None:
     elif kind == "http":
         if event.get("payment_required"):
             print("  ← 402 payment required: paying from the session budget", flush=True)
+        elif event.get("charged") == "unknown":
+            print(f"  ← {event.get('status')} payment outcome not confirmed yet: checking the receipt later\n", flush=True)
         elif event.get("charged") is False:
             failed = ", ".join(event.get("failed_checks") or []) or "answer check"
             print(f"  ← {event.get('status')} answer failed Misa's check ({failed}): not charged\n", flush=True)
@@ -89,7 +91,7 @@ def render(event: dict) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("prompt")
-    parser.add_argument("--budget", default="0.10", help="session spend cap in USD")
+    parser.add_argument("--budget", default="2.00", help="session spend cap in USD")
     parser.add_argument("--minutes", type=int, default=15, help="session lifetime (15-480)")
     parser.add_argument("--local", action="store_true", help="call `agentcore dev` on localhost instead")
     parser.add_argument("--port", type=int, default=8080)

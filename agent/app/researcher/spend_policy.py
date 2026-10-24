@@ -59,7 +59,7 @@ def check_payment(request: Any, max_price_usd: Decimal, allowed_host: Optional[s
         except ValueError:
             return False, "unreadable amount"
         if price > max_price_usd:
-            return False, f"price ${price} is above the ${max_price_usd} per-call limit"
+            return False, f"price ${price:.2f} is above the ${max_price_usd:.2f} per-call limit"
     return True, "ok"
 
 

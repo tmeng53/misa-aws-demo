@@ -6,7 +6,7 @@ in test USDC through **AgentCore Payments** (x402 on Base Sepolia), and cites a 
 budget for the task; it cannot spend more.
 
 ```
-you ── budget $0.10 ──► payment session (AgentCore Payments, maxSpendAmount)
+you ── budget $2 ────► payment session (AgentCore Payments, maxSpendAmount)
  │
  └─ question ──► research agent (Strands on AgentCore Runtime)
                    │ find_paid_apis ──► AgentCore Gateway search ──► Misa door OpenAPI target
@@ -27,11 +27,11 @@ you ── budget $0.10 ──► payment session (AgentCore Payments, maxSpendA
 
 ## Spending rules
 
-1. **Session cap** (AgentCore Payments): `run_demo.py --budget 0.10` creates a session that can spend at most $0.10 and expires after 15 minutes.
-2. **Per-call rule** (`spend_policy.py`, checked before anything is signed): only x402 `exact` on Base Sepolia in USDC, only on the Misa host (`MISA_GATEWAY_URL`), and at most `MAX_PRICE_PER_CALL_USD` (default $0.05) per call. Anything it can't read is refused.
+1. **Session cap** (AgentCore Payments): `run_demo.py --budget 2.00` creates a session that can spend at most $2 and expires after 15 minutes.
+2. **Per-call guard** (the payments plugin's built-in `pre_sign_policy`, rules in `spend_policy.py`): only x402 `exact` on Base Sepolia in USDC, only on the Misa host (`MISA_GATEWAY_URL`), and at most `MAX_PRICE_PER_CALL_USD` (default $1) per call. Prices are $0.50 a call. Anything it can't read is refused.
 3. Only the plugin's own `http_request` tool can trigger a payment (`allow_unmarked_402_detection=False`).
 
-Misa's door settles only after the seller's answer passes its checks, so a broken answer costs nothing.
+There is no wallet or payment code of our own: AgentCore Payments holds the wallet, enforces the budget and pays. Misa's door settles only after the seller's answer passes its checks, so a broken answer costs nothing.
 
 ## Setup (once)
 
@@ -53,7 +53,7 @@ Runtime environment variables: `MISA_GATEWAY_URL` (catalog and the only host it 
 ## Run
 
 ```sh
-RUNTIME_ARN=... python scripts/run_demo.py --budget 0.10 \
+RUNTIME_ARN=... python scripts/run_demo.py --budget 2.00 \
   "Which software companies report earnings next week, and what does the consensus expect?"
 ```
 

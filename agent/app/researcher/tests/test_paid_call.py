@@ -1,4 +1,4 @@
-"""Checks the pieces that decide whether the agent pays, against a local door shaped like the contract."""
+"""Checks the pieces that decide whether the agent pays, against a local door shaped like contract v2.1."""
 
 import base64
 import json
@@ -23,8 +23,11 @@ from settings import Settings  # noqa: E402
 from spend_policy import check_payment  # noqa: E402
 
 PORT = 4791
-DOOR = f"http://localhost:{PORT}/x/{stub_door.SLUG}/v1/companies/nwnd/estimates"
+MISA = f"http://localhost:{PORT}"
+LISTING = f"{MISA}/x/{stub_door.SLUG}"
+DOOR = f"{LISTING}/v1/companies/fbk/estimates"
 FAKE_ARN = "arn:aws:bedrock-agentcore:us-west-2:111122223333:payment-manager/pm-test"
+SIGNATURE = base64.b64encode(json.dumps({"x402Version": 2, "payload": "stub"}).encode()).decode()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -44,6 +47,12 @@ def http_request():
     return plugin.http_request
 
 
+@pytest.fixture
+def settings(monkeypatch):
+    monkeypatch.setenv("MISA_GATEWAY_URL", MISA)
+    return Settings.from_env()
+
+
 def _payment_request(tool_result):
     handler = get_payment_handler("http_request", {"url": DOOR})
     return {
@@ -54,66 +63,106 @@ def _payment_request(tool_result):
 
 
 def test_unpaid_call_is_seen_as_a_402_with_the_doors_requirement(http_request):
-    result = http_request(url=DOOR)
-    request = _payment_request(result)
+    request = _payment_request(http_request(url=DOOR))
     assert request["statusCode"] == 402
     header = next(v for k, v in request["headers"].items() if k.lower() == "payment-required")
-    decoded = json.loads(base64.b64decode(header))
-    assert decoded["accepts"][0]["amount"] == "15000"
-    assert decoded["accepts"][0]["network"] == "eip155:84532"
+    accept = json.loads(base64.b64decode(header))["accepts"][0]
+    assert (accept["amount"], accept["network"], accept["scheme"]) == ("500000", "eip155:84532", "exact")
 
 
-def test_policy_allows_a_cheap_call_on_the_misa_host(http_request):
+def test_guard_allows_a_50_cent_call_on_the_misa_host(http_request):
     request = _payment_request(http_request(url=DOOR))
-    assert check_payment(request, Decimal("0.05"), "localhost") == (True, "ok")
+    assert check_payment(request, Decimal("1.00"), "localhost") == (True, "ok")
 
 
-def test_policy_refuses_a_call_above_the_per_call_limit(http_request):
+def test_guard_refuses_a_call_above_the_per_call_limit(http_request):
     request = _payment_request(http_request(url=DOOR))
-    assert check_payment(request, Decimal("0.01"), "localhost") == (
+    assert check_payment(request, Decimal("0.25"), "localhost") == (
         False,
-        "price $0.015 is above the $0.01 per-call limit",
+        "price $0.50 is above the $0.25 per-call limit",
     )
 
 
-def test_policy_refuses_to_pay_a_host_other_than_misa(http_request):
+def test_guard_refuses_to_pay_a_host_other_than_misa(http_request):
     request = _payment_request(http_request(url=DOOR))
-    assert check_payment(request, Decimal("0.05"), "misa.example") == (
+    assert check_payment(request, Decimal("1.00"), "misa.example") == (
         False,
-        f"resource 'http://localhost:{PORT}/x/{stub_door.SLUG}/v1/companies/nwnd/estimates' is not on misa.example",
+        f"resource '{DOOR}' is not on misa.example",
     )
 
 
-def test_policy_refuses_what_it_cannot_read():
+def test_guard_refuses_what_it_cannot_read():
     assert check_payment({"statusCode": 402, "headers": {}, "body": {"text": "pay me"}}, Decimal("1"), None) == (
         False,
         "no readable x402 payment requirement",
     )
 
 
-def test_paid_call_returns_the_answer_and_receipt(http_request):
-    signature = base64.b64encode(json.dumps({"x402Version": 2, "payload": "stub"}).encode()).decode()
-    result = http_request(url=DOOR, headers={"PAYMENT-SIGNATURE": signature})
-    summary = _tool_result_summary(result)
-    assert summary["status"] == 200
-    assert summary["paid"] is True
-    assert summary["check"] == "passed"
-    assert len(summary["receipt"]) == 36
-    body = json.loads(result["content"][0]["text"])["body"]
-    assert body["ticker"] == "NWND"
+def test_paid_calls_pass_twice_then_fail_the_check_uncharged(http_request, settings):
+    verify = make_verify_receipt(settings)
+
+    first = http_request(url=DOOR, headers={"PAYMENT-SIGNATURE": SIGNATURE})
+    summary = _tool_result_summary(first)
+    assert (summary["status"], summary["paid"], summary["check"]) == (200, True, "passed")
+    assert json.loads(first["content"][0]["text"])["body"]["ticker"] == "FBK"
+    receipt = verify(listing_url=LISTING, receipt_id=summary["receipt"])["receipt"]
+    assert (receipt["check"], receipt["charged"], receipt["amount_usd"]) == ("passed", True, "0.50")
+
+    http_request(url=DOOR, headers={"PAYMENT-SIGNATURE": SIGNATURE})
+
+    third = _tool_result_summary(http_request(url=DOOR, headers={"PAYMENT-SIGNATURE": SIGNATURE}))
+    assert (third["status"], third["paid"], third["charged"], third["failed_checks"]) == (
+        502,
+        False,
+        False,
+        ["not_empty"],
+    )
+    receipt = verify(listing_url=LISTING, receipt_id=third["receipt"])["receipt"]
+    assert (receipt["check"], receipt["charged"], receipt["outcome"]) == ("failed", False, "refused_by_check")
 
 
-def test_catalog_search_lists_operations_with_price_and_url(monkeypatch):
-    monkeypatch.setenv("MISA_GATEWAY_URL", f"http://localhost:{PORT}")
-    found = search_misa_catalog(Settings.from_env(), "earnings estimates")
-    assert found == [
+def test_unknown_settle_is_reported_as_unknown_not_free():
+    result = {
+        "status": "success",
+        "content": [
+            {
+                "text": json.dumps(
+                    {
+                        "statusCode": 502,
+                        "headers": {"content-type": "application/problem+json"},
+                        "body": {"charged": "unknown", "detail": "settlement not confirmed yet"},
+                    }
+                )
+            }
+        ],
+    }
+    assert _tool_result_summary(result) == {
+        "status": 502,
+        "payment_required": False,
+        "paid": False,
+        "check": None,
+        "receipt": None,
+        "charged": "unknown",
+        "failed_checks": None,
+    }
+
+
+def test_receipt_lookup_refuses_other_hosts(settings):
+    verify = make_verify_receipt(settings)
+    assert verify(listing_url="https://evil.example/x/a", receipt_id="r-1") == {
+        "error": f"receipts are only looked up on {MISA}"
+    }
+
+
+def test_catalog_search_lists_operations_with_price_and_url(settings):
+    assert search_misa_catalog(settings, "earnings estimates") == [
         {
-            "api": "Northwind Fundamentals",
-            "listing": f"http://localhost:{PORT}/x/{stub_door.SLUG}",
-            "operation": "getEarningsEstimates",
-            "call": f"GET http://localhost:{PORT}/x/{stub_door.SLUG}/v1/companies/{{ticker}}/estimates",
-            "summary": "Consensus earnings estimates for upcoming quarters",
-            "price_usd": "0.015",
+            "api": "Fernbrook Fundamentals",
+            "listing": LISTING,
+            "operation": "getEstimates",
+            "call": f"GET {LISTING}/v1/companies/{{ticker}}/estimates",
+            "summary": "Consensus earnings estimates for the next two quarters",
+            "price_usd": "0.50",
         }
     ]
 
@@ -126,8 +175,8 @@ def test_gateway_search_result_is_flattened_to_tools():
             "structuredContent": {
                 "tools": [
                     {
-                        "name": "northwind___getEarningsEstimates",
-                        "description": "Paid per call via x402: GET https://misa.example/x/nw/v1/companies/{ticker}/estimates, $0.015",
+                        "name": "Fernbrook___getEstimates",
+                        "description": "Paid per call via x402: GET https://misa.example/x/fb/v1/companies/{ticker}/estimates, $0.50",
                         "inputSchema": {"type": "object", "properties": {"ticker": {"type": "string"}}},
                     }
                 ]
@@ -136,59 +185,8 @@ def test_gateway_search_result_is_flattened_to_tools():
     }
     assert tools_from_search_result(rpc) == [
         {
-            "tool": "northwind___getEarningsEstimates",
-            "description": "Paid per call via x402: GET https://misa.example/x/nw/v1/companies/{ticker}/estimates, $0.015",
+            "tool": "Fernbrook___getEstimates",
+            "description": "Paid per call via x402: GET https://misa.example/x/fb/v1/companies/{ticker}/estimates, $0.50",
             "inputs": {"ticker": {"type": "string"}},
         }
     ]
-
-
-def test_receipt_lookup_reports_check_and_charge(monkeypatch):
-    monkeypatch.setenv("MISA_GATEWAY_URL", f"http://localhost:{PORT}")
-    verify = make_verify_receipt(Settings.from_env())
-    result = verify(listing_url=f"http://localhost:{PORT}/x/{stub_door.SLUG}", receipt_id="r-1")
-    assert result["receipt"] == {
-        "receipt_id": "r-1",
-        "check": "passed",
-        "charged": True,
-        "amount_usd": "0.015",
-        "network": "eip155:84532",
-    }
-
-
-def test_receipt_lookup_refuses_other_hosts(monkeypatch):
-    monkeypatch.setenv("MISA_GATEWAY_URL", f"http://localhost:{PORT}")
-    verify = make_verify_receipt(Settings.from_env())
-    assert verify(listing_url="https://evil.example/x/a", receipt_id="r-1") == {
-        "error": f"receipts are only looked up on http://localhost:{PORT}"
-    }
-
-
-def test_failed_check_is_reported_as_not_charged():
-    result = {
-        "status": "success",
-        "content": [
-            {
-                "text": json.dumps(
-                    {
-                        "statusCode": 502,
-                        "headers": {"content-type": "application/problem+json"},
-                        "body": {
-                            "type": "https://misa.dev/problems/answer-check-failed",
-                            "charged": False,
-                            "failed_checks": ["non_empty"],
-                        },
-                    }
-                )
-            }
-        ],
-    }
-    assert _tool_result_summary(result) == {
-        "status": 502,
-        "payment_required": False,
-        "paid": False,
-        "check": None,
-        "receipt": None,
-        "charged": False,
-        "failed_checks": ["non_empty"],
-    }
