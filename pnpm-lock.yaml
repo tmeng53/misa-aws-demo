@@ -166,7 +166,7 @@ importers:
 
   .: {}
 
-  apps/research-api:
+  apps/seller-api:
     dependencies:
       '@hono/node-server':
         specifier: ^2.1.5

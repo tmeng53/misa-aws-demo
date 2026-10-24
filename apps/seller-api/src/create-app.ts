@@ -1,9 +1,9 @@
 import { Hono, type Context } from "hono";
 import { timingSafeEqual } from "node:crypto";
-import { isFaultMode, type FaultMode } from "./fault.js";
+import { FAULT_MODES, isFaultMode, outcome } from "./fault.js";
 import type { FaultStore } from "./fault-store.js";
 import { openApiDocument } from "./openapi.js";
-import { consolePage, coveragePage, docsPage, homePage, keyPage, pricingJsonLd, pricingPage, signupPage } from "./pages.js";
+import { coveragePage, docsPage, homePage, keyPage, pricingJsonLd, pricingPage, signupPage } from "./pages.js";
 import { PLANS, findPlan, issueKey, readKey, type PlanId } from "./plans.js";
 import { AS_OF, SECTORS } from "./companies.js";
 import {
@@ -28,8 +28,6 @@ export type AppConfig = {
   // Guards the fault switch. When unset, the switch is off.
   adminToken?: string;
   faults: FaultStore;
-  // Lets tests skip the 20-second wait of the `slow` mode.
-  sleep?: (ms: number) => Promise<void>;
 };
 
 type Env = { Variables: { plan: PlanId; keyId: string } };
@@ -53,7 +51,6 @@ function intParam(value: string | undefined): number | undefined | "invalid" {
 
 export function createApp(config: AppConfig) {
   const app = new Hono<Env>();
-  const sleep = config.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   // Calls used per key this month. Best effort: kept in memory per instance.
   const usage = new Map<string, number>();
 
@@ -67,7 +64,7 @@ export function createApp(config: AppConfig) {
   app.get("/openapi.json", (c) => c.json(openApiDocument(baseUrl(c))));
   app.get("/health", (c) => c.json({ ok: true }));
 
-  app.get("/signup", (c) => c.html(signupPage(c.req.query("plan") ?? "starter")));
+  app.get("/signup", (c) => c.html(signupPage(c.req.query("plan") ?? "professional")));
   app.post("/signup", async (c) => {
     const form = await c.req.parseBody();
     const email = typeof form.email === "string" ? form.email.trim() : "";
@@ -80,7 +77,6 @@ export function createApp(config: AppConfig) {
   });
 
   // The fault switch.
-  app.get("/console", async (c) => c.html(consolePage(await config.faults.get())));
   app.use("/admin/*", async (c, next) => {
     const header = c.req.header("authorization") ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
@@ -89,14 +85,14 @@ export function createApp(config: AppConfig) {
     }
     await next();
   });
-  app.get("/admin/fault", async (c) => c.json({ mode: await config.faults.get() }));
+  app.get("/admin/fault", async (c) => c.json({ mode: await config.faults.mode() }));
   app.post("/admin/fault", async (c) => {
     const body: unknown = await c.req.json().catch(() => undefined);
     const mode = typeof body === "object" && body !== null && "mode" in body ? body.mode : undefined;
     if (!isFaultMode(mode)) {
-      return problem(c, 400, "Invalid mode", "mode must be one of none, empty, malformed, error, slow.");
+      return problem(c, 400, "Invalid mode", `mode must be one of ${FAULT_MODES.join(", ")}.`);
     }
-    await config.faults.set(mode);
+    await config.faults.setMode(mode);
     return c.json({ mode });
   });
 
@@ -104,7 +100,7 @@ export function createApp(config: AppConfig) {
   app.use("/v1/*", async (c, next) => {
     const key = c.req.header("x-api-key") ?? "";
     const known = config.staticKeys.find((k) => sameSecret(k, key));
-    const parsed = known ? { plan: "pro" as const, keyId: `static-${config.staticKeys.indexOf(known)}` } : readKey(config.keySecret, key);
+    const parsed = known ? { plan: "enterprise" as const, keyId: `static-${config.staticKeys.indexOf(known)}` } : readKey(config.keySecret, key);
     if (!parsed) {
       return problem(c, 401, "Unauthorized", "Send a valid API key in the X-API-Key header. Get one at /signup.");
     }
@@ -117,19 +113,14 @@ export function createApp(config: AppConfig) {
     c.set("plan", parsed.plan);
     c.set("keyId", parsed.keyId);
 
-    const mode: FaultMode = await config.faults.get();
-    switch (mode) {
-      case "none":
+    const call = await config.faults.countCall(parsed.keyId);
+    switch (outcome(await config.faults.mode(), call)) {
+      case "ok":
         return next();
       case "empty":
         return c.json({ results: [] });
-      case "malformed":
-        return c.body("<html><body>Service temporarily unavailable</body></html>", 200, { "content-type": "text/html" });
       case "error":
-        return problem(c, 500, "Internal error", "Something went wrong on our side.");
-      case "slow":
-        await sleep(20_000);
-        return next();
+        return problem(c, 500, "Internal error", "Something went wrong on our side. Please try again.");
     }
   });
 

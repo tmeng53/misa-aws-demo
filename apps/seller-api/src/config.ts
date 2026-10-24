@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { createApp } from "./app.js";
+import { createApp } from "./create-app.js";
 import { blobFaultStore, memoryFaultStore } from "./fault-store.js";
 
 // Builds the app from environment variables (see .env.example).

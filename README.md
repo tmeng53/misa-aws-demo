@@ -24,7 +24,7 @@ pnpm test
 
 | Path | What |
 | --- | --- |
-| `GET /pricing` | Free $0 / 100 calls, Starter $29 / 2,000, Pro $99 / 10,000 a month (yearly: $290, $990). schema.org `Product` JSON-LD in the page, also at `/pricing.json` |
+| `GET /pricing` | Individual $25 / 50 calls, Professional $292 / 1,000, Enterprise $708 / 5,000 a month (yearly: ten times monthly). schema.org `Product` JSON-LD in the page, also at `/pricing.json` |
 | `GET /signup` | Get an API key (plans are simulated, no card) |
 | `GET /companies` | Coverage: every company and ticker |
 | `GET /openapi.json` | OpenAPI 3.0.3, auth by `X-API-Key` header |
@@ -35,11 +35,13 @@ pnpm test
 | `GET /v1/companies/{ticker}/earnings` | Past quarters against consensus, with surprise % |
 | `GET /v1/calendar?from=&to=&sector=` | Earnings calendar (default: 14 days from 2026-10-24) |
 | `GET /v1/sectors`, `GET /v1/sectors/{sector}/compare?metric=` | Sectors, and peer rankings |
-| `GET /console`, `POST /admin/fault` | The bad-day switch, guarded by `PROVIDER_ADMIN_TOKEN` |
+| `POST /admin/fault` | Hidden rehearsal override, guarded by `PROVIDER_ADMIN_TOKEN` |
 
-Bad-day modes for `POST /admin/fault` (`{"mode": "..."}`): `none` (healthy), `empty` (200 with `{"results":[]}`), `malformed` (200 with HTML), `error` (500), `slow` (20 s wait).
+**Intermittent failures.** Like a real flaky API, every 3rd paid call for an API key fails on its own, alternating between `200 {"results":[]}` and a `500`. Nobody has to press anything during a demo.
+
+For rehearsals, `POST /admin/fault` with `{"mode": "..."}` overrides it: `rhythm` (default), `none` (always healthy), `always_empty`, `always_error`.
 
 ```sh
 curl -X POST "$PROVIDER_URL/admin/fault" -H "Authorization: Bearer $PROVIDER_ADMIN_TOKEN" \
-  -H "content-type: application/json" -d '{"mode":"empty"}'
+  -H "content-type: application/json" -d '{"mode":"none"}'
 ```
