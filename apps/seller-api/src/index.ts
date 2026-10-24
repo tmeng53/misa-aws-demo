@@ -1,5 +1,10 @@
-// Vercel serves the default export of src/index.ts; keep other entry-like names (app.ts, server.ts) out of src.
-// Entry point for Vercel, which serves a default-exported Hono app.
+// Vercel serves the default export of src/index.ts, and only treats a file as
+// the entry when it imports hono. Keep other entry-like names (app.ts,
+// server.ts) out of src.
+import { Hono } from "hono";
 import { appFromEnv } from "./config.js";
 
-export default appFromEnv();
+const app = new Hono();
+app.route("/", appFromEnv());
+
+export default app;
