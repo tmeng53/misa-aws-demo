@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/serve-node.ts",
+    "start": "tsx src/serve-node.ts",
     "typecheck": "tsc -p .",
     "test": "vitest run"
   },
