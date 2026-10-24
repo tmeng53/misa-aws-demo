@@ -18,7 +18,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn('rounded-3xl border bg-card p-6', className)}>
+    <section className={cn('min-w-0 rounded-3xl border bg-card p-6', className)}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-display text-[19px] leading-[1.3] font-semibold tracking-[-0.025em]">

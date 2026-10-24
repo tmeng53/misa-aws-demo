@@ -1,18 +1,17 @@
-import { PageHead } from '@/components/page-head';
+import { ConnectForm } from '@/components/connect-form';
 import { Panel } from '@/components/panel';
+import { StepFrame } from '@/components/step-frame';
 
-// Placeholder. Screen 1 ("Connect your API") replaces this; see the brief.
-export default function Home() {
+export default function ConnectPage() {
   return (
-    <div className="grid gap-10">
-      <PageHead
-        kicker="Sell to agents"
-        title="Let AI agents pay for your API, per call."
-        lede="Paste your API, approve per-call prices, link Stripe, and you're live."
-      />
-      <Panel title="Scaffold" description="The onboarding screens are built here.">
-        <p className="text-muted-foreground">Design system wired: tokens, fonts, components.</p>
+    <StepFrame
+      kicker="Step 1 of 4"
+      title="Connect your API"
+      lede="Paste the API you already sell. We'll draft a per-call price from your plans."
+    >
+      <Panel title="Your API" description="Misa reads your OpenAPI description and, if you share it, your pricing page.">
+        <ConnectForm />
       </Panel>
-    </div>
+    </StepFrame>
   );
 }
