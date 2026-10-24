@@ -5,7 +5,7 @@ A seller who sells an API the human way (monthly plans, API keys, a pricing page
 | Folder | What |
 | --- | --- |
 | `apps/seller-api` | **Fernbrook Fundamentals API**, a fictional company-data seller modeled on real financial data APIs: company profiles, financials, consensus earnings estimates, earnings history, an earnings calendar and sector comparisons, keyed by stock ticker. Sold on monthly or annual plans with an API key. |
-| `apps/seller-onboarding` | The seller's side of Misa: paste your API, approve per-call prices, link Stripe, go live, watch agent usage. Calls the hosted Misa service. |
+| `apps/seller-onboarding` | The seller's side of Misa: paste your API, approve per-call prices, link Stripe, go live, watch agent usage. Calls the hosted Misa service at `https://api.trymisa.com` (`MISA_SERVICE_URL`). |
 
 Fernbrook is invented for this demo. Every company, ticker and figure in it is made up.
 
