@@ -23,6 +23,7 @@ you ── budget $2 ────► payment session (AgentCore Payments, maxSpe
 | `scripts/setup_wallet.py` | Creates the buyer's wallet and prints the link to authorize and fund it |
 | `scripts/register_listing.py` | Adds a Misa door's OpenAPI to the Gateway so search can find it |
 | `scripts/run_demo.py` | Creates a budgeted session, runs one question, prints what was paid and what's left |
+| `scripts/presenter_demo.py` | Opens the live Fernbrook site with no API key and stops on the 401 |
 | `scripts/stub_door.py` | Local stand-in for a Misa door (no real payments), for tests |
 
 ## Spending rules
@@ -49,6 +50,14 @@ PAYMENT_MANAGER_ARN=... PAYMENT_CONNECTOR_ID=... python scripts/setup_wallet.py 
 ```
 
 Runtime environment variables: `MISA_GATEWAY_URL` (catalog and the only host it pays), optional `MODEL_ID` (default `global.anthropic.claude-sonnet-5-5`), `MAX_PRICE_PER_CALL_USD`. The Gateway URL and payment manager ARN are injected by `agentcore deploy`.
+
+## Presenter: the human site blocks the agent
+
+An agent opens the live Fernbrook homepage, asks for QLMR estimates with no API key, and stops when the site returns 401. It does not sign up, send a key, or call Misa. From the repository root:
+
+```sh
+python agent/scripts/presenter_demo.py
+```
 
 ## Run
 
