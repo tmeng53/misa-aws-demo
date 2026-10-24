@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling ~= 1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "researcher"
+version = "0.1.0"
+description = "Generic research agent on AgentCore that finds paid APIs and pays per call with x402"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aws-opentelemetry-distro ~= 0.21.0",
+    "bedrock-agentcore[strands-agents] >= 1.25.0, < 2.0.0",
+    "botocore[crt] ~= 1.43.0",
+    "httpx >= 0.27",
+    "strands-agents >= 1.62.0, < 2.0.0",
+]
+
+[dependency-groups]
+dev = ["pytest >= 8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
