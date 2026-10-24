@@ -74,6 +74,9 @@ def render(event: dict) -> None:
     elif kind == "http":
         if event.get("payment_required"):
             print("  ← 402 payment required: paying from the session budget", flush=True)
+        elif event.get("charged") is False:
+            failed = ", ".join(event.get("failed_checks") or []) or "answer check"
+            print(f"  ← {event.get('status')} answer failed Misa's check ({failed}): not charged\n", flush=True)
         else:
             paid = "paid" if event.get("paid") else "not charged"
             check = f", check {event['check']}" if event.get("check") else ""

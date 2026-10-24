@@ -157,6 +157,30 @@ def make_find_paid_apis(settings: Settings):
     return find_paid_apis
 
 
+def make_verify_receipt(settings: Settings):
+    @tool
+    def verify_receipt(listing_url: str, receipt_id: str) -> dict:
+        """Look up Misa's receipt for a paid call: whether the answer passed its checks, whether you were
+        charged, and how much. Free to call.
+
+        Args:
+            listing_url: The API's listing URL, for example https://<misa>/x/<slug>.
+            receipt_id: The X-Misa-Receipt header value from the paid response.
+        """
+        listing_url = listing_url.rstrip("/")
+        if settings.misa_url and not listing_url.startswith(f"{settings.misa_url}/x/"):
+            return {"error": f"receipts are only looked up on {settings.misa_url}"}
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                response = client.get(f"{listing_url}/receipts/{receipt_id}", headers={"Accept": "application/json"})
+                response.raise_for_status()
+                return {"receipt_url": str(response.url), "receipt": response.json()}
+        except (httpx.HTTPError, ValueError) as exc:
+            return {"error": f"could not read receipt: {exc}"}
+
+    return verify_receipt
+
+
 def describe_sources(settings: Settings) -> Optional[str]:
     sources = []
     if settings.tool_gateway_url:

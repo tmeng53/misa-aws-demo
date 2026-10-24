@@ -13,7 +13,7 @@ from bedrock_agentcore.payments.integrations.strands import (
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 
-from discovery import make_find_paid_apis
+from discovery import make_find_paid_apis, make_verify_receipt
 from settings import BASE_SEPOLIA, Settings
 from spend_policy import make_pre_sign_policy
 
@@ -21,18 +21,20 @@ SYSTEM_PROMPT = """You are a research assistant. Answer the user's question accu
 
 When you need data you don't have (live numbers, company data, prices, records), do this:
 1. Call find_paid_apis with a plain description of the data you need.
-2. Pick the operation that fits best. Before calling it, say in one line which API you're using and its
-   price per call.
+2. Pick the operation that fits best. Prefer APIs sold through a verified door (Misa checks each answer
+   before you are charged, and gives a receipt). Before calling, say in one line which API you're using,
+   its price per call, and whether its answers are verified.
 3. Call it with http_request, using the exact URL from the search result and filling in its parameters.
    Payment is handled for you: if the API asks for payment, it is paid from your budget and the request
    is retried. You never handle keys or wallets yourself.
-4. Make as few paid calls as the question needs. Never repeat a call that already succeeded.
-5. If a call fails or comes back empty, say so plainly. A failed answer is not charged, so you may try
-   one other operation, but don't loop.
+4. After a paid call, call verify_receipt with the listing URL and the X-Misa-Receipt header value to
+   confirm the answer passed its checks and what you were charged. Trust the data only once it's verified.
+5. Make as few paid calls as the question needs. Never repeat a call that already succeeded.
+6. If a call fails its check (HTTP 502 with charged: false) or comes back empty, say plainly that the
+   answer was broken and you were not charged. You may try one other operation, but don't loop.
 
 In your final answer, give the answer first, then a short "Sources" list: for each paid call, the API
-name, what it cost, and its receipt link if the response included an X-Misa-Receipt header
-(the receipt link is the listing URL followed by /receipts/<receipt id>).
+name, what it cost, and whether its receipt confirmed the check passed.
 """
 
 
@@ -41,7 +43,7 @@ def build_agent(
     payment_session_id: Optional[str],
     payment_instrument_id: Optional[str],
 ) -> Agent:
-    tools: list[Any] = [make_find_paid_apis(settings)]
+    tools: list[Any] = [make_find_paid_apis(settings), make_verify_receipt(settings)]
     plugins = []
     if settings.payment_manager_arn:
         allowed_host = urlparse(settings.misa_url).hostname if settings.misa_url else None
@@ -89,12 +91,15 @@ def _tool_result_summary(block: dict) -> Optional[dict]:
         if not isinstance(payload, dict) or "statusCode" not in payload:
             return None
         headers = {k.lower(): v for k, v in (payload.get("headers") or {}).items()}
+        body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
         return {
             "status": payload["statusCode"],
             "payment_required": payment_required,
             "paid": "payment-response" in headers,
             "check": headers.get("x-misa-check"),
             "receipt": headers.get("x-misa-receipt"),
+            "charged": body.get("charged"),
+            "failed_checks": body.get("failed_checks") or body.get("checks"),
         }
     return None
 

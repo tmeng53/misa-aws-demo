@@ -62,6 +62,12 @@ class Door(BaseHTTPRequestHandler):
                     }
                 ],
             )
+        if url.path.startswith(f"/x/{SLUG}/receipts/"):
+            receipt_id = url.path.rsplit("/", 1)[-1]
+            return self._send(
+                200,
+                {"receipt_id": receipt_id, "check": "passed", "charged": True, "amount_usd": "0.015", "network": "eip155:84532"},
+            )
         if url.path.startswith(f"/x/{SLUG}/v1/companies/") and url.path.endswith("/estimates"):
             requirement = {
                 "x402Version": 2,

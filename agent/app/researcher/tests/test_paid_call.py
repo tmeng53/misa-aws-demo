@@ -17,7 +17,7 @@ from bedrock_agentcore.payments.integrations.strands import (  # noqa: E402
     AgentCorePaymentsPlugin,
     AgentCorePaymentsPluginConfig,
 )
-from discovery import search_misa_catalog, tools_from_search_result  # noqa: E402
+from discovery import make_verify_receipt, search_misa_catalog, tools_from_search_result  # noqa: E402
 from research_agent import _tool_result_summary  # noqa: E402
 from settings import Settings  # noqa: E402
 from spend_policy import check_payment  # noqa: E402
@@ -141,3 +141,54 @@ def test_gateway_search_result_is_flattened_to_tools():
             "inputs": {"ticker": {"type": "string"}},
         }
     ]
+
+
+def test_receipt_lookup_reports_check_and_charge(monkeypatch):
+    monkeypatch.setenv("MISA_GATEWAY_URL", f"http://localhost:{PORT}")
+    verify = make_verify_receipt(Settings.from_env())
+    result = verify(listing_url=f"http://localhost:{PORT}/x/{stub_door.SLUG}", receipt_id="r-1")
+    assert result["receipt"] == {
+        "receipt_id": "r-1",
+        "check": "passed",
+        "charged": True,
+        "amount_usd": "0.015",
+        "network": "eip155:84532",
+    }
+
+
+def test_receipt_lookup_refuses_other_hosts(monkeypatch):
+    monkeypatch.setenv("MISA_GATEWAY_URL", f"http://localhost:{PORT}")
+    verify = make_verify_receipt(Settings.from_env())
+    assert verify(listing_url="https://evil.example/x/a", receipt_id="r-1") == {
+        "error": f"receipts are only looked up on http://localhost:{PORT}"
+    }
+
+
+def test_failed_check_is_reported_as_not_charged():
+    result = {
+        "status": "success",
+        "content": [
+            {
+                "text": json.dumps(
+                    {
+                        "statusCode": 502,
+                        "headers": {"content-type": "application/problem+json"},
+                        "body": {
+                            "type": "https://misa.dev/problems/answer-check-failed",
+                            "charged": False,
+                            "failed_checks": ["non_empty"],
+                        },
+                    }
+                )
+            }
+        ],
+    }
+    assert _tool_result_summary(result) == {
+        "status": 502,
+        "payment_required": False,
+        "paid": False,
+        "check": None,
+        "receipt": None,
+        "charged": False,
+        "failed_checks": ["non_empty"],
+    }
