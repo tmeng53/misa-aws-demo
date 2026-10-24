@@ -1,0 +1,128 @@
+/*
+ * @misa/theme: Misa's design tokens (the Deep sea look of the Misa design
+ * system), in three layers.
+ *
+ *   1. Brand inputs (@theme): the five colors everything is mixed from. Also
+ *      usable as utilities (bg-misa-blue), but only for ambient glows; build
+ *      with layer 2.
+ *   2. Semantic tokens (:root): what a color is for, with shadcn/ui's names
+ *      (background / foreground pairs). Misa is dark only: there is no light
+ *      theme, and every surface sits on Deep sea.
+ *   3. Tailwind mapping (@theme inline): semantic tokens as utilities
+ *      (bg-background, text-primary-foreground, border-border, …).
+ *
+ * To change a color, change it once in layer 1 or 2; nothing else hard-codes one.
+ *
+ * Use: in an app's global stylesheet, after Tailwind:
+ *   @import 'tailwindcss';
+ *   @import '@misa/theme/theme.css';
+ * and put `class="dark"` on <html>, so shadcn/ui's `dark:` styles apply.
+ * Fonts: the app loads Geist (the `geist` package: --font-geist-sans, --font-geist-mono)
+ * and Bricolage Grotesque for headlines (next/font: --font-bricolage).
+ */
+
+/* shadcn/ui components carry `dark:` styles; they follow the .dark class the app sets on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 1. Brand inputs ---------------------------------------------------------- */
+@theme {
+  --color-misa-deep-sea: #040a12; /* the base */
+  --color-misa-ink: #e9ecf5; /* text, and the tint surfaces mix in */
+  --color-misa-blue: #1e8bff; /* primary */
+  --color-misa-sky: #7fd1ff; /* secondary */
+  --color-misa-gold: #f5c451; /* accent */
+}
+
+/* 2. Semantic tokens ------------------------------------------------------- */
+:root {
+  --background: var(--color-misa-deep-sea);
+  --foreground: var(--color-misa-ink);
+  /* Raised surfaces, mixed from Deep sea and ink: card 4%, popover 7%, muted 8%. */
+  --card: #091119;
+  --card-foreground: var(--color-misa-ink);
+  --popover: #0f161f;
+  --popover-foreground: var(--color-misa-ink);
+
+  /* White on the blue is 3.4:1: fine for short, medium-weight button labels, not for body text. */
+  --primary: var(--color-misa-blue);
+  --primary-foreground: #ffffff;
+  /* Sky: mono kickers, icons at rest. */
+  --secondary: var(--color-misa-sky);
+  --secondary-foreground: var(--color-misa-deep-sea);
+  /* Gold: a highlight for numbers only. Unlike stock shadcn/ui, accent is not a hover surface; hovers use muted. */
+  --accent: var(--color-misa-gold);
+  --accent-foreground: var(--color-misa-deep-sea);
+
+  --muted: #101821;
+  /* 4.85:1 on background, 4.6:1 on card. */
+  --muted-foreground: #787e87;
+  /* Decorative or redundant marks only (2.3:1, below AA for text). */
+  --faint: #454c56;
+  --border: rgb(233 236 245 / 0.11);
+  --input: rgb(233 236 245 / 0.15);
+  --ring: var(--color-misa-blue);
+  --code-surface: #020408;
+
+  /* Verdicts: a delivery kept its promise, broke it, or is still being checked. Always with a word or an icon. */
+  --pass: #3ddc97;
+  --fail: #ff5d6c;
+  --wait: #f5b84b;
+  --destructive: var(--fail);
+
+  /* Every radius is a multiple of this one. */
+  --radius: 0.75rem;
+  color-scheme: dark;
+}
+
+/* 3. Tailwind mapping ------------------------------------------------------ */
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Headlines, card titles, stats and the wordmark. */
+  --font-display: var(--font-bricolage), var(--font-geist-sans), system-ui, sans-serif;
+  --font-heading: var(--font-display);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint: var(--faint);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-code-surface: var(--code-surface);
+  --color-pass: var(--pass);
+  --color-fail: var(--fail);
+  --color-wait: var(--wait);
+
+  /* Compact controls (sm, md); nav links (lg); buttons (xl); cards (2xl); panels (3xl). */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 35%, transparent);
+  }
+}
