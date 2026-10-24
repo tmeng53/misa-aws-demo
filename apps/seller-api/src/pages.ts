@@ -1,125 +1,412 @@
 import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
-import { AS_OF, COMPANIES, SECTORS } from "./companies.js";
+import { AS_OF, COMPANIES, SECTORS, type Company } from "./companies.js";
+import { getEarnings, getEstimates } from "./fundamentals.js";
 import { PLANS, type Plan } from "./plans.js";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
+type PageName = "home" | "coverage" | "pricing" | "excel" | "about" | "subscribe";
 
 const styles = `
-:root{--ink:#14213d;--muted:#56607a;--line:#dde2ec;--bg:#f6f8fb;--card:#fff;--accent:#1f6f78;--accent-ink:#fff;--warn:#b23a2a;--soft:#e8f2f3}
-@media (prefers-color-scheme: dark){:root{--ink:#e6eaf2;--muted:#9aa4b8;--line:#2c3448;--bg:#0f1420;--card:#161d2c;--accent:#5fb7c0;--accent-ink:#0b1018;--warn:#ef8a78;--soft:#17303a}}
-*{box-sizing:border-box}body{margin:0;font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg)}
-a{color:var(--accent)}header,main,footer{max-width:1080px;margin:0 auto;padding:0 20px}
-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:18px;padding-bottom:18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-.brand{font-weight:800;font-size:20px;text-decoration:none;color:var(--ink);letter-spacing:-.2px}.brand span{color:var(--accent)}
-nav{display:flex;gap:18px;flex-wrap:wrap;font-size:15px}nav a{text-decoration:none;color:var(--muted)}nav a:hover{color:var(--ink)}
-h1{font-size:40px;line-height:1.12;margin:48px 0 12px;letter-spacing:-.6px}h2{margin-top:44px}.lede{font-size:19px;color:var(--muted);max-width:700px}
-.btn{display:inline-block;background:var(--accent);color:var(--accent-ink);padding:10px 18px;border-radius:8px;text-decoration:none;border:0;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
-.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin:24px 0}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px}
-.card.featured{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
-.price{font-size:34px;font-weight:800}.price small{font-size:15px;color:var(--muted);font-weight:400}
-ul.ticks{padding-left:18px;color:var(--muted)}
-code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px}pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;overflow-x:auto}
-form{display:grid;gap:12px;max-width:460px}label{display:grid;gap:4px;font-size:14px;color:var(--muted)}
-input,select{font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
-.table{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:15px}td,th{text-align:left;padding:8px;border-bottom:1px solid var(--line)}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
-.note{font-size:14px;color:var(--muted)}.warn{color:var(--warn)}
-.toggle{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--card)}.toggle button{border:0;background:transparent;color:var(--muted);padding:6px 14px;border-radius:999px;font:inherit;cursor:pointer}.toggle button[aria-pressed=true]{background:var(--soft);color:var(--ink);font-weight:600}
-.tag{display:inline-block;background:var(--soft);border-radius:6px;padding:1px 8px;font-size:13px}
-footer{margin-top:64px;padding-top:20px;padding-bottom:40px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+:root {
+  --ink: #1c1915;
+  --muted: #5c564c;
+  --navy: #1c3048;
+  --navy-2: #152536;
+  --paper: #f4f0e6;
+  --sheet: #fffdf8;
+  --rule: #d4cdb8;
+  --rule-strong: #1c3048;
+  --burgundy: #6e2c2c;
+  --link: #1c3048;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: #e7e1d4;
+  color: var(--ink);
+  font: 15px/1.45 Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
+}
+a { color: var(--link); }
+.wrap { max-width: 980px; margin: 18px auto 40px; background: var(--paper); border: 1px solid #c9c1ae; }
+.util {
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  background: var(--navy-2); color: #efe8d8; font: 12px/1 Arial, Helvetica, sans-serif;
+  padding: 7px 18px; letter-spacing: .02em;
+}
+.util a { color: #efe8d8; }
+.mast {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
+  padding: 16px 18px 12px; border-bottom: 4px solid var(--navy);
+}
+.word { font-size: 34px; letter-spacing: .14em; font-weight: normal; margin: 0; line-height: 1; }
+.since { margin: 4px 0 0; font: 12px/1.3 Arial, Helvetica, sans-serif; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.mast-side { text-align: right; font: 12px/1.4 Arial, Helvetica, sans-serif; color: var(--muted); }
+nav { background: var(--navy); display: flex; flex-wrap: wrap; gap: 0; }
+nav a {
+  color: #f4f0e6; text-decoration: none; border-right: 1px solid #34506e;
+  font: 13px/1 Arial, Helvetica, sans-serif; letter-spacing: .04em; padding: 10px 14px;
+}
+nav a[aria-current="page"] { background: #f4f0e6; color: var(--navy); font-weight: bold; }
+main { padding: 18px 18px 8px; }
+h1 { font-size: 26px; font-weight: normal; margin: 0 0 8px; }
+h1.word { font-size: 34px; letter-spacing: .14em; margin: 0; }
+h2 { font-size: 18px; font-weight: normal; margin: 22px 0 8px; border-bottom: 1px solid var(--rule-strong); padding-bottom: 3px; }
+p { margin: 0 0 10px; }
+.doors { display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); margin: 12px 0 18px; }
+.door { padding: 10px 12px 12px; border-right: 1px solid var(--rule); }
+.door:last-child { border-right: 0; }
+.kicker { font: 11px/1 Arial, Helvetica, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--burgundy); margin: 0 0 4px; }
+.door p { font-size: 14px; margin: 0; }
+.table { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font: 13px/1.35 Arial, Helvetica, sans-serif; }
+th { text-align: left; font-weight: bold; background: var(--navy); color: #f4f0e6; padding: 6px 8px; }
+td { padding: 5px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tr:nth-child(even) td { background: #efeae0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.sheet {
+  display: grid; grid-template-columns: 1.3fr .7fr; gap: 0;
+  background: var(--sheet); border: 1px solid var(--navy); margin-top: 8px;
+}
+.sheet-main, .sheet-side { padding: 12px 14px; }
+.sheet-side { border-left: 1px solid var(--rule); background: #f7f3ea; }
+.sheet h3 { margin: 0; font-size: 20px; font-weight: normal; }
+.ticker { font: 12px/1 Arial, Helvetica, sans-serif; letter-spacing: .08em; color: var(--muted); }
+.stats { width: 100%; font: 13px/1.4 Arial, Helvetica, sans-serif; border-collapse: collapse; }
+.stats td, .stats tr:nth-child(even) td { border: 0; background: transparent; padding: 2px 0; }
+.stats td.n { text-align: right; }
+.btn {
+  display: inline-block; background: var(--burgundy); color: #fffdf8; text-decoration: none;
+  font: bold 13px/1 Arial, Helvetica, sans-serif; padding: 8px 12px; border: 0; cursor: pointer;
+}
+form { display: grid; gap: 8px; max-width: 420px; font: 14px Arial, Helvetica, sans-serif; }
+label { display: grid; gap: 3px; }
+input, select { font: 14px Arial, Helvetica, sans-serif; padding: 6px 8px; border: 1px solid #b7ad98; background: white; }
+pre, code { font: 13px/1.45 ui-monospace, "Courier New", monospace; }
+pre { background: var(--sheet); border: 1px solid var(--rule); padding: 10px 12px; overflow-x: auto; }
+.actions { margin-top: 14px; }
+footer {
+  margin-top: 22px; padding: 12px 18px 16px; border-top: 4px solid var(--navy);
+  font: 12px/1.45 Arial, Helvetica, sans-serif; color: var(--muted);
+}
+footer a { color: var(--muted); }
+.note { font: 12px/1.4 Arial, Helvetica, sans-serif; color: var(--muted); }
+@media (max-width: 720px) {
+  .doors, .sheet { grid-template-columns: 1fr; }
+  .door { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .sheet-side { border-left: 0; border-top: 1px solid var(--rule); }
+  .word, h1.word { font-size: 26px; letter-spacing: .08em; }
+  .mast-side { text-align: left; }
+}
 `;
 
-function layout(title: string, body: Html, head: Html = html``): Html {
+const NAV: readonly { id: PageName; href: string; label: string }[] = [
+  { id: "home", href: "/", label: "Home" },
+  { id: "coverage", href: "/companies", label: "Coverage" },
+  { id: "pricing", href: "/pricing", label: "Pricing" },
+  { id: "excel", href: "/docs", label: "Excel & API" },
+  { id: "about", href: "/about", label: "About" },
+  { id: "subscribe", href: "/signup", label: "Subscribe" },
+];
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+const epsText = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function sectorName(slug: Company["sector"]): string {
+  return SECTORS.find((s) => s.slug === slug)?.name ?? slug;
+}
+
+function isoToUtc(iso: string): Date {
+  return new Date(`${iso}T00:00:00Z`);
+}
+
+function addIsoDays(iso: string, days: number): string {
+  const date = isoToUtc(iso);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDay(iso: string): string {
+  const date = isoToUtc(iso);
+  const weekday = WEEKDAYS[date.getUTCDay()] ?? "";
+  const month = MONTHS[date.getUTCMonth()] ?? "";
+  return `${weekday} ${date.getUTCDate()} ${month}`;
+}
+
+function formatAsOf(iso: string): string {
+  const date = isoToUtc(iso);
+  const month = MONTHS[date.getUTCMonth()] ?? "";
+  return `${date.getUTCDate()} ${month} ${date.getUTCFullYear()}`;
+}
+
+// AS_OF is a Saturday in this dataset. "This week" is the Monday–Sunday week
+// that starts on or after that date, using each company's next reportDate.
+// It is not a separate calendar.
+function reportingWeek(asOf: string): { from: string; to: string } {
+  const day = isoToUtc(asOf).getUTCDay();
+  const untilMonday = day === 1 ? 0 : day === 0 ? 1 : 8 - day;
+  const from = addIsoDays(asOf, untilMonday);
+  return { from, to: addIsoDays(from, 6) };
+}
+
+type ReportRow = { date: string; ticker: string; name: string; sector: string; eps: number; count: number };
+
+function reportRows(from: string, to: string): ReportRow[] {
+  const rows: ReportRow[] = [];
+  for (const company of COMPANIES) {
+    for (const estimate of company.estimates) {
+      if (estimate.reportDate < from || estimate.reportDate > to) continue;
+      rows.push({
+        date: estimate.reportDate,
+        ticker: company.ticker,
+        name: company.name,
+        sector: sectorName(company.sector),
+        eps: estimate.eps.consensus,
+        count: estimate.eps.count,
+      });
+    }
+  }
+  rows.sort((a, b) => a.date.localeCompare(b.date) || a.ticker.localeCompare(b.ticker));
+  return rows;
+}
+
+function homeReports(): { heading: string; note: string; rows: ReportRow[] } {
+  const week = reportingWeek(AS_OF);
+  const rows = reportRows(week.from, week.to);
+  if (rows.length > 0) {
+    return {
+      heading: "Reports this week",
+      note: "Week of 26 October 2026.",
+      rows,
+    };
+  }
+  const upcoming = reportRows(AS_OF, "9999-12-31");
+  const first = upcoming[0];
+  if (!first) {
+    return {
+      heading: "Reports this week",
+      note: `No upcoming report dates are on file as of ${formatAsOf(AS_OF)}.`,
+      rows: [],
+    };
+  }
+  const to = addIsoDays(first.date, 6);
+  return {
+    heading: "Next reports",
+    note: `No company reports in the week of ${formatDay(week.from)}. The next dates on file run ${formatDay(first.date)} through ${formatDay(to)}. Figures are sample data.`,
+    rows: reportRows(first.date, to),
+  };
+}
+
+function layout(input: { title: string; page: PageName; body: Html; head?: Html }): Html {
+  const head = input.head ?? html``;
+  const founded = 2004;
+  const year = isoToUtc(AS_OF).getUTCFullYear();
   return html`<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title}</title>
+    <title>${input.title}</title>
     <style>
       ${raw(styles)}
     </style>
     ${head}
   </head>
   <body>
-    <header>
-      <a class="brand" href="/">Fern<span>brook</span></a>
+    <div class="wrap">
+      <div class="util">
+        <span>Hartford, Connecticut · Consensus estimates since ${founded}</span>
+        <span><a href="mailto:sales@fernbrook.example">sales@fernbrook.example</a> · <a href="/signup">Subscribe</a></span>
+      </div>
+      <header class="mast">
+        <div>
+          <h1 class="word">FERNBROOK</h1>
+          <p class="since">Estimates</p>
+        </div>
+        <div class="mast-side">
+          ${COMPANIES.length} companies · ${SECTORS.length} sectors<br />
+          Data as of ${formatAsOf(AS_OF)}
+        </div>
+      </header>
       <nav>
-        <a href="/companies">Coverage</a>
-        <a href="/pricing">Pricing</a>
-        <a href="/docs">API docs</a>
-        <a href="/signup">Get an API key</a>
+        ${NAV.map((item) =>
+          item.id === input.page
+            ? html`<a href="${item.href}" aria-current="page">${item.label}</a>`
+            : html`<a href="${item.href}">${item.label}</a>`,
+        )}
       </nav>
-    </header>
-    <main>${body}</main>
-    <footer>
-      Fernbrook is a fictional data company made for a demo. Every company, ticker and figure on this site is invented. Data as of ${AS_OF}.
-    </footer>
+      <main>${input.body}</main>
+      <footer>
+        Fernbrook Estimates · Hartford, Connecticut · © ${founded}–${year} ·
+        <a href="mailto:sales@fernbrook.example">sales@fernbrook.example</a><br />
+        Figures on this site are sample data.
+      </footer>
+    </div>
   </body>
 </html>`;
 }
 
-const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
-const billions = (n: number) => `$${(n / 1e9).toFixed(1)}B`;
+function planAudience(plan: Plan): string {
+  switch (plan.id) {
+    case "individual":
+      return "An investor following a handful of names";
+    case "professional":
+      return "An analyst who models every week";
+    case "enterprise":
+      return "A research desk or a university department";
+  }
+}
 
-function planCard(plan: Plan): Html {
-  const featured = plan.id === "professional";
-  return html`<div class="card ${featured ? "featured" : ""}">
-    <h3>${plan.name} ${featured ? html`<span class="tag">Most popular</span>` : ""}</h3>
-    <div class="price">
-      <span data-monthly>${usd(plan.monthlyUsd)}<small> / month</small></span>
-      <span data-annual hidden>${usd(plan.annualUsd)}<small> / year</small></span>
-    </div>
-    <p class="note">${plan.requestsPerMonth.toLocaleString("en-US")} API calls a month</p>
-    <p>${plan.blurb}</p>
-    <ul class="ticks">
-      ${plan.features.map((f) => html`<li>${f}</li>`)}
-    </ul>
-    <a class="btn ${featured ? "" : "ghost"}" href="/signup?plan=${plan.id}">Choose ${plan.name}</a>
-  </div>`;
+function planIncluded(plan: Plan): string {
+  const calls = `${plan.requestsPerMonth.toLocaleString("en-US")} calls a month`;
+  switch (plan.id) {
+    case "individual":
+      return `Sheets, financials, earnings calendar. ${calls}.`;
+    case "professional":
+      return `Estimates, surprises, sector ranks, and a key for Excel. ${calls}.`;
+    case "enterprise":
+      return `10 seats, one shared key, yearly invoice. ${calls}.`;
+  }
+}
+
+function surpriseText(pct: number): string {
+  const text = pct.toFixed(1);
+  return pct > 0 ? `+${text}%` : `${text}%`;
 }
 
 export function homePage(): Html {
-  return layout(
-    "Fernbrook · Company fundamentals API",
-    html`<h1>Fundamentals and earnings estimates, one API key away.</h1>
-      <p class="lede">
-        Clean financials, consensus estimates and earnings surprises for ${COMPANIES.length} US-listed companies across ${SECTORS.length} sectors.
-        Pick a plan, get a key, pull data into your model or spreadsheet.
-      </p>
-      <p><a class="btn" href="/signup?plan=professional">Start your plan</a> <a class="btn ghost" href="/pricing">See pricing</a></p>
-      <div class="grid">
-        <div class="card"><strong>Financials</strong><p class="note">Quarterly and annual income statements back to 2023.</p></div>
-        <div class="card"><strong>Consensus estimates</strong><p class="note">EPS and revenue expectations for the next two quarters.</p></div>
-        <div class="card"><strong>Earnings history</strong><p class="note">Every reported quarter against the consensus, with the surprise.</p></div>
-        <div class="card"><strong>Sector comparisons</strong><p class="note">Rank peers on growth, margins and size.</p></div>
-      </div>`,
-  );
+  const reports = homeReports();
+  const company = COMPANIES.find((c) => c.ticker === "QLMR") ?? COMPANIES[0];
+  const next = company ? getEstimates(company.ticker)?.results[0] : undefined;
+  const last = company ? getEarnings(company.ticker, 1)?.results[0] : undefined;
+  return layout({
+    title: "Fernbrook Estimates",
+    page: "home",
+    body: html`<div class="doors">
+        <div class="door">
+          <p class="kicker">For individuals</p>
+          <p>The consensus sheet for names you already follow. Web access, financials, and the earnings calendar.</p>
+        </div>
+        <div class="door">
+          <p class="kicker">For professionals</p>
+          <p>Estimates, surprises, and peer ranks for an analyst who models every week. Includes a key for Excel.</p>
+        </div>
+        <div class="door">
+          <p class="kicker">For a department</p>
+          <p>Ten seats for a research desk or a university class. One shared key. We invoice the department yearly.</p>
+        </div>
+      </div>
+      <h2>${reports.heading}</h2>
+      <div class="table">
+        <table>
+          <tr>
+            <th>Date</th>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th>Sector</th>
+            <th class="n">Consensus EPS</th>
+            <th class="n">Estimates</th>
+          </tr>
+          ${reports.rows.map(
+            (row) => html`<tr>
+              <td>${formatDay(row.date)}</td>
+              <td>${row.ticker}</td>
+              <td>${row.name}</td>
+              <td>${row.sector}</td>
+              <td class="n">${epsText(row.eps)}</td>
+              <td class="n">${row.count}</td>
+            </tr>`,
+          )}
+        </table>
+      </div>
+      <p class="note">${reports.note}</p>
+      ${
+        company && next
+          ? html`<h2>Sample sheet · ${company.name}</h2>
+            <div class="sheet">
+              <div class="sheet-main">
+                <p class="ticker">${company.exchange} · ${company.ticker} · ${sectorName(company.sector).toUpperCase()}</p>
+                <h3>${company.name}</h3>
+                <p>${company.description} ${company.headquarters}. Consensus for ${next.fiscal_period}.</p>
+                <table class="stats">
+                  <tr>
+                    <td>Consensus EPS</td>
+                    <td class="n">${epsText(next.eps_consensus)}</td>
+                  </tr>
+                  <tr>
+                    <td>High / low</td>
+                    <td class="n">${epsText(next.eps_high)} / ${epsText(next.eps_low)}</td>
+                  </tr>
+                  <tr>
+                    <td>Number of estimates</td>
+                    <td class="n">${next.analyst_count}</td>
+                  </tr>
+                  <tr>
+                    <td>Consensus revenue</td>
+                    <td class="n">${usd(next.revenue_consensus)}</td>
+                  </tr>
+                  <tr>
+                    <td>Next report</td>
+                    <td class="n">${formatDay(next.report_date)} ${isoToUtc(next.report_date).getUTCFullYear()}</td>
+                  </tr>
+                  ${
+                    last
+                      ? html`<tr>
+                          <td>Last quarter surprise</td>
+                          <td class="n">${surpriseText(last.eps_surprise_pct)}</td>
+                        </tr>
+                        <tr>
+                          <td>Reported vs consensus EPS</td>
+                          <td class="n">${epsText(last.eps_actual)} vs ${epsText(last.eps_consensus)}</td>
+                        </tr>`
+                      : ""
+                  }
+                </table>
+              </div>
+              <div class="sheet-side">
+                <p class="kicker">On this page</p>
+                <p>One company. One quarter. The number our clients put in the model.</p>
+                <p><a class="btn" href="/pricing">See subscriptions</a></p>
+                <p class="note" style="margin-top:10px">
+                  Full coverage is ${COMPANIES.length} companies. We do not follow the rest of the market.
+                </p>
+              </div>
+            </div>`
+          : ""
+      }`,
+  });
 }
 
 export function coveragePage(): Html {
-  return layout(
-    "Coverage · Fernbrook",
-    html`<h1>Coverage</h1>
-      <p class="lede">${COMPANIES.length} companies across ${SECTORS.length} sectors. Data as of ${AS_OF}.</p>
+  return layout({
+    title: "Coverage · Fernbrook Estimates",
+    page: "coverage",
+    body: html`<h1>Coverage</h1>
+      <p>${COMPANIES.length} companies, chosen because our clients hold them. ${SECTORS.length} sectors. Data as of ${formatAsOf(AS_OF)}.</p>
       <div class="table">
         <table>
-          <tr><th>Ticker</th><th>Company</th><th>Sector</th><th>Industry</th><th class="n">Market cap</th></tr>
+          <tr>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th>Sector</th>
+            <th>Industry</th>
+            <th>Headquarters</th>
+          </tr>
           ${COMPANIES.map(
-            (c) =>
-              html`<tr>
-                <td><strong>${c.ticker}</strong></td>
-                <td>${c.name}</td>
-                <td>${SECTORS.find((s) => s.slug === c.sector)?.name ?? c.sector}</td>
-                <td>${c.industry}</td>
-                <td class="n">${billions(c.price * c.sharesOutstanding)}</td>
-              </tr>`,
+            (c) => html`<tr>
+              <td>${c.ticker}</td>
+              <td>${c.name}</td>
+              <td>${sectorName(c.sector)}</td>
+              <td>${c.industry}</td>
+              <td>${c.headquarters}</td>
+            </tr>`,
           )}
         </table>
       </div>`,
-  );
+  });
 }
 
 // schema.org JSON-LD for the plans, so software can read prices without
@@ -157,33 +444,41 @@ export function pricingJsonLd(baseUrl: string) {
 }
 
 export function pricingPage(baseUrl: string): Html {
-  // JSON.stringify output is safe inside a script tag once "<" is escaped.
   const jsonLd = JSON.stringify(pricingJsonLd(baseUrl)).replace(/</g, "\\u003c");
-  return layout(
-    "Pricing · Fernbrook",
-    html`<h1>Plans for every desk.</h1>
-      <p class="lede">Pay monthly, or yearly and get two months free. Calls reset on the first of each month.</p>
-      <div class="toggle" role="group" aria-label="Billing">
-        <button type="button" data-billing="monthly" aria-pressed="true">Monthly</button>
-        <button type="button" data-billing="annual" aria-pressed="false">Yearly</button>
+  return layout({
+    title: "Pricing · Fernbrook Estimates",
+    page: "pricing",
+    body: html`<h1>Subscriptions</h1>
+      <p>
+        Yearly is ten months' price. Calls reset on the first of each month and do not roll over. Card for Individual and
+        Professional. Invoice for Enterprise.
+      </p>
+      <div class="table">
+        <table>
+          <tr>
+            <th>Plan</th>
+            <th>Who it is for</th>
+            <th class="n">Year</th>
+            <th class="n">Month</th>
+            <th>Included</th>
+          </tr>
+          ${PLANS.map(
+            (plan) => html`<tr>
+              <td>${plan.name}</td>
+              <td>${planAudience(plan)}</td>
+              <td class="n">${usd(plan.annualUsd)}</td>
+              <td class="n">${usd(plan.monthlyUsd)}</td>
+              <td>${planIncluded(plan)}</td>
+            </tr>`,
+          )}
+        </table>
       </div>
-      <div class="grid">${PLANS.map(planCard)}</div>
-      <p>Need bulk files or redistribution rights? <a href="mailto:sales@fernbrook.example">Talk to sales</a>.</p>
-      <p class="note">Prices in US dollars, billed by card. Unused calls don't roll over. Need more calls? Upgrade any time.</p>
-      <script>
-        document.querySelectorAll("[data-billing]").forEach((button) => {
-          button.addEventListener("click", () => {
-            const annual = button.dataset.billing === "annual";
-            document.querySelectorAll("[data-billing]").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
-            document.querySelectorAll("[data-monthly]").forEach((el) => (el.hidden = annual));
-            document.querySelectorAll("[data-annual]").forEach((el) => (el.hidden = !annual));
-          });
-        });
-      </script>`,
-    html`<script type="application/ld+json">
+      <p class="actions"><a class="btn" href="/signup">Subscribe</a></p>
+      <p class="note">Prices in US dollars. Unused calls do not roll over.</p>`,
+    head: html`<script type="application/ld+json">
       ${raw(jsonLd)}
     </script>`,
-  );
+  });
 }
 
 export function docsPage(baseUrl: string): Html {
@@ -197,56 +492,96 @@ export function docsPage(baseUrl: string): Html {
     ["GET /v1/sectors", "Sectors covered."],
     ["GET /v1/sectors/{sector}/compare?metric=", "Rank a sector on revenue_growth_yoy, gross_margin, net_margin, eps_growth_yoy or market_cap_usd."],
   ];
-  return layout(
-    "API docs · Fernbrook",
-    html`<h1>API docs</h1>
-      <p class="lede">Send your key in the <code>X-API-Key</code> header. Every answer is JSON. Money is in US dollars; ratios are fractions.</p>
+  const individual = PLANS.find((plan) => plan.id === "individual");
+  const calls = individual ? individual.requestsPerMonth.toLocaleString("en-US") : "";
+  return layout({
+    title: "Excel & API · Fernbrook Estimates",
+    page: "excel",
+    body: html`<h1>Excel &amp; API</h1>
+      <p>
+        A subscription includes a key so a person can pull a sheet into Excel or a model. Send it in the
+        <code>X-API-Key</code> header.
+      </p>
       <pre>curl "${baseUrl}/v1/companies/QLMR/estimates" \\
   -H "X-API-Key: fb_live_..."</pre>
       <div class="table">
         <table>
-          <tr><th>Call</th><th>What it does</th></tr>
+          <tr>
+            <th>Call</th>
+            <th>What you get</th>
+          </tr>
           ${rows.map(([call, what]) => html`<tr><td><code>${call}</code></td><td>${what}</td></tr>`)}
         </table>
       </div>
       <p>Sectors: ${SECTORS.map((s) => s.slug).join(", ")}. The full description is at <a href="/openapi.json">/openapi.json</a> (OpenAPI 3.0).</p>
-      <h2>Errors</h2>
-      <p>Errors use RFC 9457 problem details. <code>401</code> means a missing or wrong key; <code>429</code> means this month's calls are used up.</p>`,
-  );
+      <p class="note">
+        Individual includes ${calls} calls a month, enough to refresh a short list. A missing or wrong key returns 401. A used-up
+        month returns 429.
+      </p>`,
+  });
+}
+
+export function aboutPage(): Html {
+  return layout({
+    title: "About · Fernbrook Estimates",
+    page: "about",
+    body: html`<h1>About</h1>
+      <p>
+        Fernbrook Estimates started in Hartford in 2004. Two people left a regional bank's research desk and kept writing the
+        consensus for the names their clients actually held.
+      </p>
+      <p>
+        The list is still ${COMPANIES.length} companies. Each one has a single page: EPS and revenue, high, low, how many
+        estimates, and the last surprise.
+      </p>
+      <p>
+        In 2018 a university finance department and two investor-relations firms asked to stop retyping the sheet into Excel.
+        The subscription has included a key since then. The sheet is still the product.
+      </p>
+      <p>
+        Fernbrook Estimates<br />
+        Hartford, Connecticut<br />
+        <a href="mailto:sales@fernbrook.example">sales@fernbrook.example</a>
+      </p>`,
+  });
 }
 
 export function signupPage(selected: string): Html {
-  return layout(
-    "Get an API key · Fernbrook",
-    html`<h1>Get your API key</h1>
-      <p class="lede">It takes a minute. This is a demo, so no card is charged.</p>
+  return layout({
+    title: "Subscribe · Fernbrook Estimates",
+    page: "subscribe",
+    body: html`<h1>Subscribe</h1>
+      <p>Tell us the plan and where to send the key. No card is charged on this form.</p>
       <form method="post" action="/signup">
+        <label>Name <input type="text" name="name" autocomplete="name" /></label>
         <label>Work email <input type="email" name="email" required autocomplete="email" /></label>
         <label
           >Plan
           <select name="plan">
             ${PLANS.map(
-              (p) =>
-                html`<option value="${p.id}" ${p.id === selected ? "selected" : ""}>
-                  ${p.name}: ${usd(p.monthlyUsd)}/month, ${p.requestsPerMonth.toLocaleString("en-US")} calls
-                </option>`,
+              (plan) => html`<option value="${plan.id}" ${plan.id === selected ? "selected" : ""}>
+                ${plan.name} — ${usd(plan.annualUsd)} / year${plan.id === "enterprise" ? ", invoiced" : ""}
+              </option>`,
             )}
           </select>
         </label>
-        <button class="btn" type="submit">Create my key</button>
+        <label>Institution, if this is for a department <input type="text" name="institution" placeholder="University or firm" /></label>
+        <button class="btn" type="submit">Subscribe</button>
       </form>`,
-  );
+  });
 }
 
 export function keyPage(input: { email: string; plan: Plan; key: string; baseUrl: string }): Html {
-  return layout(
-    "Your API key · Fernbrook",
-    html`<h1>Welcome to ${input.plan.name}.</h1>
-      <p class="lede">Here is the key for ${input.email}. Keep it secret: anyone with it can use your calls.</p>
+  return layout({
+    title: "Your key · Fernbrook Estimates",
+    page: "subscribe",
+    body: html`<h1>Your ${input.plan.name} key</h1>
+      <p>Here is the key for ${input.email}. Keep it secret: anyone with it can use your calls.</p>
       <pre>${input.key}</pre>
       <p>
-        Your plan includes ${input.plan.requestsPerMonth.toLocaleString("en-US")} calls a month for ${usd(input.plan.monthlyUsd)}. Try it:
+        This plan includes ${input.plan.requestsPerMonth.toLocaleString("en-US")} calls a month. ${usd(input.plan.annualUsd)} a year,
+        or ${usd(input.plan.monthlyUsd)} a month. Pull a sheet into Excel:
       </p>
       <pre>curl "${input.baseUrl}/v1/calendar" -H "X-API-Key: ${input.key}"</pre>`,
-  );
+  });
 }
