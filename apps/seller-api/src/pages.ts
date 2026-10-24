@@ -1,7 +1,6 @@
 import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
 import { AS_OF, COMPANIES, SECTORS } from "./companies.js";
-import { FAULT_DESCRIPTIONS, FAULT_MODES, type FaultMode } from "./fault.js";
 import { PLANS, type Plan } from "./plans.js";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
@@ -30,7 +29,6 @@ input,select{font:inherit;padding:9px 10px;border:1px solid var(--line);border-r
 .toggle{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--card)}.toggle button{border:0;background:transparent;color:var(--muted);padding:6px 14px;border-radius:999px;font:inherit;cursor:pointer}.toggle button[aria-pressed=true]{background:var(--soft);color:var(--ink);font-weight:600}
 .tag{display:inline-block;background:var(--soft);border-radius:6px;padding:1px 8px;font-size:13px}
 footer{margin-top:64px;padding-top:20px;padding-bottom:40px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
-.modes{display:grid;gap:8px;max-width:620px}.modes button{text-align:left}.modes button[aria-pressed=true]{outline:3px solid var(--warn)}
 `;
 
 function layout(title: string, body: Html, head: Html = html``): Html {
@@ -67,7 +65,7 @@ const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 const billions = (n: number) => `$${(n / 1e9).toFixed(1)}B`;
 
 function planCard(plan: Plan): Html {
-  const featured = plan.id === "starter";
+  const featured = plan.id === "professional";
   return html`<div class="card ${featured ? "featured" : ""}">
     <h3>${plan.name} ${featured ? html`<span class="tag">Most popular</span>` : ""}</h3>
     <div class="price">
@@ -79,7 +77,7 @@ function planCard(plan: Plan): Html {
     <ul class="ticks">
       ${plan.features.map((f) => html`<li>${f}</li>`)}
     </ul>
-    <a class="btn ${featured ? "" : "ghost"}" href="/signup?plan=${plan.id}">${plan.monthlyUsd === 0 ? "Start free" : `Choose ${plan.name}`}</a>
+    <a class="btn ${featured ? "" : "ghost"}" href="/signup?plan=${plan.id}">Choose ${plan.name}</a>
   </div>`;
 }
 
@@ -91,7 +89,7 @@ export function homePage(): Html {
         Clean financials, consensus estimates and earnings surprises for ${COMPANIES.length} US-listed companies across ${SECTORS.length} sectors.
         Pick a plan, get a key, pull data into your model or spreadsheet.
       </p>
-      <p><a class="btn" href="/signup?plan=starter">Start your plan</a> <a class="btn ghost" href="/pricing">See pricing</a></p>
+      <p><a class="btn" href="/signup?plan=professional">Start your plan</a> <a class="btn ghost" href="/pricing">See pricing</a></p>
       <div class="grid">
         <div class="card"><strong>Financials</strong><p class="note">Quarterly and annual income statements back to 2023.</p></div>
         <div class="card"><strong>Consensus estimates</strong><p class="note">EPS and revenue expectations for the next two quarters.</p></div>
@@ -154,7 +152,7 @@ export function pricingJsonLd(baseUrl: string) {
     description: "Monthly and annual plans for the Fernbrook company fundamentals API.",
     url: `${baseUrl}/pricing`,
     brand: { "@type": "Brand", name: "Fernbrook" },
-    offers: [...PLANS.map((p) => offer(p, "P1M")), ...PLANS.filter((p) => p.annualUsd > 0).map((p) => offer(p, "P1Y"))],
+    offers: [...PLANS.map((p) => offer(p, "P1M")), ...PLANS.map((p) => offer(p, "P1Y"))],
   };
 }
 
@@ -170,10 +168,7 @@ export function pricingPage(baseUrl: string): Html {
         <button type="button" data-billing="annual" aria-pressed="false">Yearly</button>
       </div>
       <div class="grid">${PLANS.map(planCard)}</div>
-      <div class="card">
-        <h3>Enterprise</h3>
-        <p>Bulk files, redistribution rights, an SLA and invoicing. <a href="mailto:sales@fernbrook.example">Talk to sales</a>.</p>
-      </div>
+      <p>Need bulk files or redistribution rights? <a href="mailto:sales@fernbrook.example">Talk to sales</a>.</p>
       <p class="note">Prices in US dollars, billed by card. Unused calls don't roll over. Need more calls? Upgrade any time.</p>
       <script>
         document.querySelectorAll("[data-billing]").forEach((button) => {
@@ -253,47 +248,5 @@ export function keyPage(input: { email: string; plan: Plan; key: string; baseUrl
         Your plan includes ${input.plan.requestsPerMonth.toLocaleString("en-US")} calls a month for ${usd(input.plan.monthlyUsd)}. Try it:
       </p>
       <pre>curl "${input.baseUrl}/v1/calendar" -H "X-API-Key: ${input.key}"</pre>`,
-  );
-}
-
-export function consolePage(current: FaultMode): Html {
-  return layout(
-    "Status console · Fernbrook",
-    html`<h1>Status console</h1>
-      <p class="lede">For the demo: give the API a bad day, then set it back.</p>
-      <form id="token-form" onsubmit="return false">
-        <label>Admin token <input type="password" id="token" autocomplete="off" /></label>
-      </form>
-      <p class="note">Current mode: <strong id="current">${current}</strong></p>
-      <div class="modes">
-        ${FAULT_MODES.map(
-          (mode) =>
-            html`<button class="btn ${mode === "none" ? "" : "ghost"}" data-mode="${mode}" aria-pressed="${mode === current}">
-              <strong>${mode}</strong>: ${FAULT_DESCRIPTIONS[mode]}
-            </button>`,
-        )}
-      </div>
-      <p class="note warn" id="error"></p>
-      <script>
-        const tokenInput = document.getElementById("token");
-        try { tokenInput.value = sessionStorage.getItem("fb-admin") || ""; } catch {}
-        document.querySelectorAll("[data-mode]").forEach((button) => {
-          button.addEventListener("click", async () => {
-            const token = tokenInput.value.trim();
-            try { sessionStorage.setItem("fb-admin", token); } catch {}
-            const res = await fetch("/admin/fault", {
-              method: "POST",
-              headers: { "content-type": "application/json", authorization: "Bearer " + token },
-              body: JSON.stringify({ mode: button.dataset.mode }),
-            });
-            const body = await res.json().catch(() => ({}));
-            document.getElementById("error").textContent = res.ok ? "" : body.detail || "Could not change the mode.";
-            if (res.ok) {
-              document.getElementById("current").textContent = body.mode;
-              document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === body.mode)));
-            }
-          });
-        });
-      </script>`,
   );
 }

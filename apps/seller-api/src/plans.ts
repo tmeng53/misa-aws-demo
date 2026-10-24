@@ -5,31 +5,31 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const PLANS = [
   {
-    id: "free",
-    name: "Free",
-    monthlyUsd: 0,
-    annualUsd: 0,
-    requestsPerMonth: 100,
-    blurb: "Try the data before you commit.",
-    features: ["Company search and profiles", "Quarterly financials", "Community support"],
+    id: "individual",
+    name: "Individual",
+    monthlyUsd: 25,
+    annualUsd: 250,
+    requestsPerMonth: 50,
+    blurb: "For an investor following a handful of names.",
+    features: ["Company profiles and search", "Quarterly and annual financials", "Earnings calendar", "Email support"],
   },
   {
-    id: "starter",
-    name: "Starter",
-    monthlyUsd: 29,
-    annualUsd: 290,
-    requestsPerMonth: 2_000,
-    blurb: "For an individual investor or analyst.",
-    features: ["Everything in Free", "Consensus estimates", "Earnings history and calendar", "Email support"],
+    id: "professional",
+    name: "Professional",
+    monthlyUsd: 292,
+    annualUsd: 2_920,
+    requestsPerMonth: 1_000,
+    blurb: "For an analyst who models every week.",
+    features: ["Everything in Individual", "Consensus estimates", "Earnings history with surprises", "Sector comparisons"],
   },
   {
-    id: "pro",
-    name: "Pro",
-    monthlyUsd: 99,
-    annualUsd: 990,
-    requestsPerMonth: 10_000,
-    blurb: "For a research team that models every day.",
-    features: ["Everything in Starter", "Sector comparisons", "5 seats", "Priority support"],
+    id: "enterprise",
+    name: "Enterprise",
+    monthlyUsd: 708,
+    annualUsd: 7_080,
+    requestsPerMonth: 5_000,
+    blurb: "For a research desk sharing one account.",
+    features: ["Everything in Professional", "10 seats", "Priority support", "Annual invoicing"],
   },
 ] as const;
 
@@ -59,7 +59,7 @@ export function issueKey(secret: string, plan: PlanId): string {
 }
 
 export function readKey(secret: string, key: string): ApiKey | undefined {
-  const match = /^fb_live_(free|starter|pro)_([A-Za-z0-9]{12})_([A-Za-z0-9_-]{22})$/.exec(key);
+  const match = /^fb_live_(individual|professional|enterprise)_([A-Za-z0-9]{12})_([A-Za-z0-9_-]{22})$/.exec(key);
   if (!match) return undefined;
   const [, plan, keyId, signature] = match;
   if (!plan || !keyId || !signature || !isPlanId(plan)) return undefined;

@@ -5,18 +5,14 @@ import { memoryFaultStore } from "../src/fault-store.js";
 const BASE = "https://api.fernbrook.test";
 
 function makeApp() {
-  const sleeps: number[] = [];
   const app = createApp({
     publicUrl: BASE,
     keySecret: "test-secret",
     staticKeys: ["misa-key"],
     adminToken: "admin-token",
     faults: memoryFaultStore(),
-    sleep: async (ms) => {
-      sleeps.push(ms);
-    },
   });
-  return { app, sleeps };
+  return { app };
 }
 
 const withKey = { headers: { "X-API-Key": "misa-key" } };
@@ -42,21 +38,22 @@ describe("API keys", () => {
     const { app } = makeApp();
     const page = await app.request("/signup", {
       method: "POST",
-      body: new URLSearchParams({ email: "ada@example.com", plan: "free" }),
+      body: new URLSearchParams({ email: "ada@example.com", plan: "individual" }),
     });
-    const key = /fb_live_free_[A-Za-z0-9]{12}_[A-Za-z0-9_-]{22}/.exec(await page.text())?.[0];
+    const key = /fb_live_individual_[A-Za-z0-9]{12}_[A-Za-z0-9_-]{22}/.exec(await page.text())?.[0];
     expect(key).toBeDefined();
     const statuses: number[] = [];
-    for (let i = 0; i < 101; i++) {
+    for (let i = 0; i < 51; i++) {
       statuses.push((await app.request("/v1/sectors", { headers: { "X-API-Key": key ?? "" } })).status);
     }
-    expect(statuses.filter((s) => s === 200)).toHaveLength(100);
-    expect(statuses[100]).toBe(429);
+    expect(statuses.filter((s) => s === 200)).toHaveLength(42);
+    expect(statuses.filter((s) => s === 500)).toHaveLength(8);
+    expect(statuses[50]).toBe(429);
   });
 
   it("rejects a key whose signature was changed", async () => {
     const { app } = makeApp();
-    const res = await app.request("/v1/sectors", { headers: { "X-API-Key": "fb_live_pro_AAAAAAAAAAAA_AAAAAAAAAAAAAAAAAAAAAA" } });
+    const res = await app.request("/v1/sectors", { headers: { "X-API-Key": "fb_live_professional_AAAAAAAAAAAA_AAAAAAAAAAAAAAAAAAAAAA" } });
     expect(res.status).toBe(401);
   });
 });
@@ -138,6 +135,7 @@ describe("fundamentals endpoints", () => {
 
   it("rejects bad input with 400", async () => {
     const { app } = makeApp();
+    await setFault(app, "none");
     expect((await app.request("/v1/companies?limit=99", withKey)).status).toBe(400);
     expect((await app.request("/v1/companies?sector=crypto", withKey)).status).toBe(400);
     expect((await app.request("/v1/sectors/software/compare?metric=vibes", withKey)).status).toBe(400);
@@ -145,47 +143,45 @@ describe("fundamentals endpoints", () => {
   });
 });
 
-describe("fault switch", () => {
-  it("needs the admin token", async () => {
+describe("intermittent failures", () => {
+  async function statuses(app: ReturnType<typeof makeApp>["app"], n: number) {
+    const out: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const res = await app.request("/v1/companies?q=solar", withKey);
+      const body = await res.text();
+      out.push(res.status === 200 ? (JSON.parse(body).results.length > 0 ? "ok" : "empty") : String(res.status));
+    }
+    return out;
+  }
+
+  it("fails every 3rd call per key, alternating empty and 500", async () => {
     const { app } = makeApp();
-    const res = await app.request("/admin/fault", { method: "POST", body: JSON.stringify({ mode: "empty" }) });
-    expect(res.status).toBe(401);
+    expect(await statuses(app, 6)).toEqual(["ok", "ok", "empty", "ok", "ok", "500"]);
   });
 
-  it("empty answers 200 with no results", async () => {
+  it("counts each key separately", async () => {
     const { app } = makeApp();
-    expect((await setFault(app, "empty")).status).toBe(200);
-    const res = await app.request("/v1/companies?q=solar", withKey);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ results: [] });
+    await statuses(app, 2);
+    const page = await app.request("/signup", { method: "POST", body: new URLSearchParams({ email: "b@example.com", plan: "professional" }) });
+    const key = /fb_live_professional_[A-Za-z0-9]{12}_[A-Za-z0-9_-]{22}/.exec(await page.text())?.[0] ?? "";
+    const other = await app.request("/v1/companies?q=solar", { headers: { "X-API-Key": key } });
+    expect((await other.json()).results).toHaveLength(1);
+    expect(await statuses(app, 1)).toEqual(["empty"]);
   });
 
-  it("malformed answers 200 with HTML", async () => {
+  it("has a hidden override that needs the admin token", async () => {
     const { app } = makeApp();
-    await setFault(app, "malformed");
-    const res = await app.request("/v1/companies?q=solar", withKey);
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toBe("text/html");
-    const text = await res.text();
-    expect(() => JSON.parse(text)).toThrow();
+    expect((await app.request("/admin/fault", { method: "POST", body: JSON.stringify({ mode: "none" }) })).status).toBe(401);
+    expect((await setFault(app, "none")).status).toBe(200);
+    expect(await statuses(app, 3)).toEqual(["ok", "ok", "ok"]);
+    await setFault(app, "always_error");
+    expect(await statuses(app, 1)).toEqual(["500"]);
+    expect((await setFault(app, "slow")).status).toBe(400);
   });
 
-  it("error answers 500 and slow waits 20 seconds", async () => {
-    const { app, sleeps } = makeApp();
-    await setFault(app, "error");
-    expect((await app.request("/v1/companies?q=solar", withKey)).status).toBe(500);
-    await setFault(app, "slow");
-    expect((await app.request("/v1/companies?q=solar", withKey)).status).toBe(200);
-    expect(sleeps).toEqual([20_000]);
-  });
-
-  it("none restores real answers, and unknown modes are refused", async () => {
+  it("has no console page", async () => {
     const { app } = makeApp();
-    await setFault(app, "empty");
-    await setFault(app, "none");
-    const body = await (await app.request("/v1/companies?q=solar", withKey)).json();
-    expect(body.results.length).toBeGreaterThan(0);
-    expect((await setFault(app, "chaos")).status).toBe(400);
+    expect((await app.request("/console")).status).toBe(404);
   });
 });
 
@@ -222,11 +218,12 @@ describe("machine-readable descriptions", () => {
         o.priceSpecification.eligibleQuantity.value,
       ]),
     ).toEqual([
-      ["Free", 0, "P1M", 100],
-      ["Starter", 29, "P1M", 2000],
-      ["Pro", 99, "P1M", 10000],
-      ["Starter (annual)", 290, "P1Y", 2000],
-      ["Pro (annual)", 990, "P1Y", 10000],
+      ["Individual", 25, "P1M", 50],
+      ["Professional", 292, "P1M", 1000],
+      ["Enterprise", 708, "P1M", 5000],
+      ["Individual (annual)", 250, "P1Y", 50],
+      ["Professional (annual)", 2920, "P1Y", 1000],
+      ["Enterprise (annual)", 7080, "P1Y", 5000],
     ]);
   });
 });
