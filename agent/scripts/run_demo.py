@@ -72,7 +72,17 @@ def render(event: dict) -> None:
         args = json.dumps(event.get("input"), ensure_ascii=False)
         print(f"\n\n  → {event.get('name')} {args[:200]}", flush=True)
     elif kind == "http":
-        if event.get("payment_required"):
+        escrow = event.get("escrow")
+        if escrow:
+            finish = escrow.get("escrow_finish") or "none (XRP stays locked until its deadline, then returns)"
+            print(
+                f"  ⇄ XRP escrow {escrow.get('drops')} drops: EscrowCreate {escrow.get('escrow_create')} "
+                f"(sequence {escrow.get('escrow_sequence')}), EscrowFinish {finish}",
+                flush=True,
+            )
+        if event.get("payment"):
+            print(f"  ← {event.get('status')} payment {event['payment']}\n", flush=True)
+        elif event.get("payment_required"):
             print("  ← 402 payment required: paying from the session budget", flush=True)
         elif event.get("charged") == "unknown":
             print(f"  ← {event.get('status')} payment outcome not confirmed yet: checking the receipt later\n", flush=True)

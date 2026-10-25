@@ -32,7 +32,11 @@ you ── budget $2 ────► payment session (AgentCore Payments, maxSpe
 2. **Per-call guard** (the payments plugin's built-in `pre_sign_policy`, rules in `spend_policy.py`): only x402 `exact` on Base Sepolia in USDC, only on the Misa host (`MISA_GATEWAY_URL`), and at most `MAX_PRICE_PER_CALL_USD` (default $1) per call. Prices are $0.50 a call. Anything it can't read is refused.
 3. Only the plugin's own `http_request` tool can trigger a payment (`allow_unmarked_402_detection=False`).
 
-There is no wallet or payment code of our own: AgentCore Payments holds the wallet, enforces the budget and pays. Misa's door settles only after the seller's answer passes its checks, so a broken answer costs nothing.
+### Paying in XRP (optional, `XRPL_PAYMENTS=1`)
+
+A Misa door can also offer XRP held in an XRPL escrow (x402 `auth-capture`). AgentCore Payments has no XRPL wallet, so with `XRPL_PAYMENTS=1` the agent pays from its own XRPL testnet wallet instead (`xrpl_payments.py`): it signs an EscrowCreate to the seller, locked by Misa's condition until Misa's deadline, and Misa's facilitator submits it before the seller is called and finishes it only when the answer passes. A failed answer is never finished; the XRP returns to the agent at the deadline. Same per-call guard (Misa host only, `MAX_PRICE_PER_CALL_USD`, drops valued at `XRP_USD_RATE`, default 2.40) plus a runtime cap `XRPL_BUDGET_USD` (default $2; locked XRP counts against it). Env: `XRPL_BUYER_SEED` (secret, the wallet's seed), optional `XRPL_NETWORK` (`xrpl:1`), `XRPL_RPC_URL`. Without the flag nothing changes.
+
+There is no wallet or payment code of our own on the default path: AgentCore Payments holds the wallet, enforces the budget and pays. Misa's door settles only after the seller's answer passes its checks, so a broken answer costs nothing.
 
 ## Setup (once)
 
