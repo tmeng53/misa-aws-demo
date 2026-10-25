@@ -137,7 +137,7 @@ function qlmrEstimateNote(): { prose: string } | undefined {
     return `For ${row.fiscal_period}, reporting ${formatDay(row.report_date)} ${year}, the consensus is ${epsText(row.eps_consensus)} of earnings per share, between ${epsText(row.eps_low)} and ${epsText(row.eps_high)}, and ${moneyWords(row.revenue_consensus)} of revenue, between ${moneyWords(row.revenue_low)} and ${moneyWords(row.revenue_high)}. ${row.analyst_count} analysts contributed.`;
   };
   return {
-    prose: `${company.name}, ticker ${company.ticker}, is a fictional company. Fernbrook invented the company, the ticker, and these figures. ${quarter(first)} ${quarter(second)}`,
+    prose: `QLMR is the stock ticker for ${company.name}. A lookup for “QLMR stock ticker” or “QLMR ticker symbol” is this company. ${company.name} is fictional. Fernbrook invented the company, the ticker, and these figures. ${quarter(first)} ${quarter(second)}`,
   };
 }
 
@@ -310,7 +310,7 @@ export function homePage(): Html {
   const next = company ? getEstimates(company.ticker)?.results[0] : undefined;
   const last = company ? getEarnings(company.ticker, 1)?.results[0] : undefined;
   return layout({
-    title: "Fernbrook Estimates",
+    title: "QLMR stock ticker · Fernbrook Estimates",
     page: "home",
     body: html`<div class="doors">
         <div class="door">
@@ -411,28 +411,27 @@ export function homePage(): Html {
 function qlmrDiscoverySection(): Html {
   const note = qlmrEstimateNote();
   if (!note) return html``;
-  return html`<h2 id="consensus-estimates-for-qlmr">Consensus estimates for QLMR</h2>
+  return html`<h2 id="qlmr-stock-ticker">QLMR stock ticker</h2>
     <p>${note.prose}</p>
-    <p>One paid call for these consensus estimates costs ${QLMR_PAID_PRICE}. The paid call URL is <a href="${QLMR_PAID_CALL_URL}">${QLMR_PAID_CALL_URL}</a>.</p>
-    <p>The same note, for a person or an agent, is linked from <a href="/llms.txt">llms.txt</a>.</p>`;
+    <p>One paid call for the consensus estimates costs ${QLMR_PAID_PRICE}. The paid call URL is <a href="${QLMR_PAID_CALL_URL}">${QLMR_PAID_CALL_URL}</a>.</p>
+    <p>The same page for an agent is <a href="/llms.txt">llms.txt</a>.</p>`;
 }
 
 export function llmsTxt(baseUrl: string): string {
   const note = qlmrEstimateNote();
-  const prose = note?.prose ?? "Quillmere Software, ticker QLMR, is a fictional company. Fernbrook invented it.";
+  const prose = note?.prose ?? "QLMR is the stock ticker for Quillmere Software, a fictional company. Fernbrook invented it.";
   const origin = baseUrl.replace(/\/$/, "");
-  return `# Fernbrook Estimates
+  return `# QLMR stock ticker
 
-Fernbrook Estimates is a fictional research shop in Hartford. Every company, ticker, and figure is made up.
-
-## Consensus estimates for QLMR
+QLMR is the stock ticker for Quillmere Software. Fernbrook Estimates is a fictional research shop in Hartford. Every company, ticker, and figure is made up.
 
 ${prose}
 
 One paid call costs ${QLMR_PAID_PRICE}.
 Paid call: ${QLMR_PAID_CALL_URL}
 
-Read the same section on the site: ${origin}/#consensus-estimates-for-qlmr
+Same page: ${origin}/#qlmr-stock-ticker
+llms.txt: ${origin}/llms.txt
 `;
 }
 
