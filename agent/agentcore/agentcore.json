@@ -1,0 +1,64 @@
+{
+  "name": "MisaResearch",
+  "version": 2,
+  "managedBy": "CDK",
+  "runtimes": [
+    {
+      "name": "researcher",
+      "build": "CodeZip",
+      "entrypoint": "main.py",
+      "codeLocation": "app/researcher",
+      "runtimeVersion": "PYTHON_3_14",
+      "protocol": "HTTP",
+      "requestHeaderAllowlist": [
+        "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Payment-Session-Id",
+        "X-Amzn-Bedrock-AgentCore-Runtime-Custom-Payment-Instrument-Id"
+      ]
+    }
+  ],
+  "memories": [],
+  "knowledgeBases": [],
+  "credentials": [
+    {
+      "authorizerType": "ApiKeyCredentialProvider",
+      "name": "MisaBuyerId"
+    }
+  ],
+  "evaluators": [],
+  "onlineEvalConfigs": [],
+  "agentCoreGateways": [
+    {
+      "name": "MisaDiscovery",
+      "protocolType": "MCP",
+      "description": "Paid APIs listed by Misa, searchable by agents",
+      "targets": [],
+      "authorizerType": "AWS_IAM",
+      "enableSemanticSearch": true,
+      "exceptionLevel": "NONE"
+    }
+  ],
+  "policyEngines": [],
+  "configBundles": [],
+  "harnesses": [],
+  "payments": [
+    {
+      "name": "MisaBuyerPayments",
+      "authorizerType": "AWS_IAM",
+      "connectors": [
+        {
+          "name": "coinbase",
+          "provider": "CoinbaseCDP",
+          "provisionMode": "QUICK_CREATE"
+        }
+      ],
+      "autoPayment": true,
+      "defaultSpendLimit": "2.00",
+      "paymentToolAllowlist": [
+        "http_request"
+      ],
+      "networkPreferences": [
+        "eip155:84532"
+      ]
+    }
+  ]
+}

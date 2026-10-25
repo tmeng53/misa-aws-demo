@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { FAULT_MODES, isFaultMode, outcome } from "./fault.js";
 import type { FaultStore } from "./fault-store.js";
 import { openApiDocument } from "./openapi.js";
-import { coveragePage, docsPage, homePage, keyPage, pricingJsonLd, pricingPage, signupPage } from "./pages.js";
+import { aboutPage, coveragePage, docsPage, homePage, keyPage, llmsTxt, pricingJsonLd, pricingPage, signupPage } from "./pages.js";
 import { PLANS, findPlan, issueKey, readKey, type PlanId } from "./plans.js";
 import { AS_OF, SECTORS } from "./companies.js";
 import {
@@ -57,10 +57,12 @@ export function createApp(config: AppConfig) {
   const baseUrl = (c: Context) => config.publicUrl ?? new URL(c.req.url).origin;
 
   app.get("/", (c) => c.html(homePage()));
+  app.get("/llms.txt", (c) => c.text(llmsTxt(baseUrl(c))));
   app.get("/companies", (c) => c.html(coveragePage()));
   app.get("/pricing", (c) => c.html(pricingPage(baseUrl(c))));
   app.get("/pricing.json", (c) => c.json(pricingJsonLd(baseUrl(c))));
   app.get("/docs", (c) => c.html(docsPage(baseUrl(c))));
+  app.get("/about", (c) => c.html(aboutPage()));
   app.get("/openapi.json", (c) => c.json(openApiDocument(baseUrl(c))));
   app.get("/health", (c) => c.json({ ok: true }));
 

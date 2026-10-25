@@ -205,6 +205,26 @@ describe("machine-readable descriptions", () => {
     ]);
   });
 
+  it("publishes a plain QLMR estimates note and llms.txt", async () => {
+    const { app } = makeApp();
+    const page = await (await app.request("/")).text();
+    const llms = await app.request("/llms.txt");
+    const text = await llms.text();
+    const paid = "https://api.trymisa.com/x/fernbrook-fundamentals/v1/companies/QLMR/estimates";
+    expect(page).toContain("QLMR stock ticker");
+    expect(page).toContain("Quillmere Software");
+    expect(page).toContain(paid);
+    expect(page).toContain("$0.50");
+    expect(page).toContain('href="/llms.txt"');
+    expect(llms.headers.get("content-type")).toContain("text/plain");
+    expect(text).toContain("QLMR is the stock ticker for Quillmere Software");
+    expect(text).toContain(paid);
+    expect(text).toContain(`${BASE}/#qlmr-stock-ticker`);
+    expect(text).toContain(`${BASE}/llms.txt`);
+    expect(text).not.toMatch(/0x[a-fA-F0-9]{8}/);
+    expect(`${page}\n${text}`.toLowerCase()).not.toMatch(/escrow|ledger|wallet/);
+  });
+
   it("puts schema.org monthly and annual plans in the pricing page", async () => {
     const { app } = makeApp();
     const page = await (await app.request("/pricing")).text();
