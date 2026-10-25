@@ -1,5 +1,6 @@
 """A generic research agent: it answers questions, and when it needs data it doesn't have, it finds a
-paid API, tells the user the price, pays per call with test USDC within the session budget, and cites
+paid API, tells the user the price, pays per call within the session budget (test USDC through AgentCore
+Payments, or XRP held in an XRPL escrow when XRPL_PAYMENTS=1), and cites
 what it bought. Nothing in here knows about any particular seller."""
 
 import json
@@ -16,6 +17,7 @@ from strands.models.bedrock import BedrockModel
 from discovery import make_find_paid_apis, make_verify_receipt
 from settings import BASE_SEPOLIA, Settings
 from spend_policy import make_pre_sign_policy
+from xrpl_payments import make_xrpl_http_request
 
 SYSTEM_PROMPT = """You are a research assistant. Answer the user's question accurately and cite your data.
 
@@ -48,7 +50,10 @@ def build_agent(
 ) -> Agent:
     tools: list[Any] = [make_find_paid_apis(settings), make_verify_receipt(settings)]
     plugins = []
-    if settings.payment_manager_arn:
+    if settings.xrpl_payments:
+        # XRP escrow from the agent's own XRPL wallet; AgentCore Payments has no XRPL wallet.
+        tools.append(make_xrpl_http_request(settings))
+    elif settings.payment_manager_arn:
         allowed_host = urlparse(settings.misa_url).hostname if settings.misa_url else None
         plugins.append(
             AgentCorePaymentsPlugin(
@@ -95,6 +100,8 @@ def _tool_result_summary(block: dict) -> Optional[dict]:
             return None
         headers = {k.lower(): v for k, v in (payload.get("headers") or {}).items()}
         body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+        # Only the XRP escrow path adds these (xrpl_payments.py).
+        xrpl = {key: payload[key] for key in ("escrow", "payment") if payload.get(key)}
         return {
             "status": payload["statusCode"],
             "payment_required": payment_required,
@@ -103,6 +110,7 @@ def _tool_result_summary(block: dict) -> Optional[dict]:
             "receipt": headers.get("x-misa-receipt") or body.get("receipt_id"),
             "charged": body.get("charged"),
             "failed_checks": body.get("failed_checks"),
+            **xrpl,
         }
     return None
 

@@ -9,6 +9,9 @@ from typing import Optional
 BASE_SEPOLIA = "eip155:84532"
 USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
 USDC_DECIMALS = 6
+# XRPL Testnet, for the optional XRP escrow path (XRPL_PAYMENTS=1).
+XRPL_TESTNET = "xrpl:1"
+XRP_DROPS = 1_000_000
 
 
 def _env(name: str) -> Optional[str]:
@@ -44,6 +47,15 @@ class Settings:
     payment_user_id: str
     # Most the agent will pay for a single call, whatever the session budget allows.
     max_price_per_call_usd: Decimal
+    # XRP escrow payments from the agent's own XRPL wallet instead of AgentCore Payments (off by default).
+    xrpl_payments: bool = False
+    xrpl_buyer_seed: Optional[str] = None
+    xrpl_network: str = XRPL_TESTNET
+    xrpl_rpc_url: str = "https://testnet.xrpl-labs.com/"
+    # What the agent values XRP at when checking a price against MAX_PRICE_PER_CALL_USD.
+    xrp_usd_rate: Decimal = Decimal("2.40")
+    # Most this runtime will lock in XRP escrows, in USD (AgentCore Payments' session cap doesn't cover XRP).
+    xrpl_budget_usd: Decimal = Decimal("2.00")
 
     @staticmethod
     def from_env() -> "Settings":
@@ -56,4 +68,10 @@ class Settings:
             payment_manager_arn=_env("PAYMENT_MANAGER_ARN") or _payment_manager_arn_from_cli_env(),
             payment_user_id=_env("PAYMENT_USER_ID") or "demo-buyer",
             max_price_per_call_usd=Decimal(_env("MAX_PRICE_PER_CALL_USD") or "1.00"),
+            xrpl_payments=_env("XRPL_PAYMENTS") == "1",
+            xrpl_buyer_seed=_env("XRPL_BUYER_SEED"),
+            xrpl_network=_env("XRPL_NETWORK") or XRPL_TESTNET,
+            xrpl_rpc_url=_env("XRPL_RPC_URL") or "https://testnet.xrpl-labs.com/",
+            xrp_usd_rate=Decimal(_env("XRP_USD_RATE") or "2.40"),
+            xrpl_budget_usd=Decimal(_env("XRPL_BUDGET_USD") or "2.00"),
         )
