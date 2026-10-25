@@ -7,6 +7,7 @@
   "scripts": {
     "dev:api": "pnpm --filter seller-api dev",
     "dev:onboarding": "pnpm --filter seller-onboarding dev",
+    "stub:misa": "pnpm --filter seller-onboarding stub",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
   }
