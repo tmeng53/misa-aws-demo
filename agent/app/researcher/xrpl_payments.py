@@ -100,6 +100,10 @@ def make_xrpl_http_request(settings: Settings):
     wallet = Wallet.from_seed(settings.xrpl_buyer_seed)
     client = JsonRpcClient(settings.xrpl_rpc_url)
     budget = XrplBudget(settings.xrpl_budget_usd)
+    # Each EscrowCreate takes the account's next Sequence, and Misa submits it only after the retry
+    # arrives. Two payments signed at once would share a Sequence and the second would be refused,
+    # so sign and send one payment at a time.
+    paying = Lock()
     allowed_host = urlparse(settings.misa_url).hostname if settings.misa_url else None
 
     @tool
@@ -132,9 +136,10 @@ def make_xrpl_http_request(settings: Settings):
                 return _result(first, payment=f"refused: {reason}")
             if not budget.take(usd):
                 return _result(first, payment="refused: the XRP budget for this task is spent")
-            blob, escrow_create, sequence = sign_escrow(option, wallet, client)
-            request_headers["PAYMENT-SIGNATURE"] = payment_signature(option, blob)
-            paid = http.request(method, url, headers=request_headers, content=body)
+            with paying:
+                blob, escrow_create, sequence = sign_escrow(option, wallet, client)
+                request_headers["PAYMENT-SIGNATURE"] = payment_signature(option, blob)
+                paid = http.request(method, url, headers=request_headers, content=body)
         settled = _decode(paid.headers.get("payment-response")) or {}
         escrow = {
             "escrow_create": escrow_create,
