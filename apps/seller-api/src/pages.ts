@@ -115,6 +115,32 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 const epsText = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// One public pay-per-call for the QLMR consensus. No account, key, or address belongs in this note.
+const QLMR_PAID_CALL_URL = "https://api.trymisa.com/x/fernbrook-fundamentals/v1/companies/QLMR/estimates";
+const QLMR_PAID_PRICE = "$0.50";
+
+function moneyWords(n: number): string {
+  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)} billion`;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)} million`;
+  return usd(n);
+}
+
+function qlmrEstimateNote(): { prose: string } | undefined {
+  const company = COMPANIES.find((c) => c.ticker === "QLMR");
+  const estimates = company ? getEstimates(company.ticker) : undefined;
+  const quarters = estimates?.results ?? [];
+  const first = quarters[0];
+  const second = quarters[1];
+  if (!company || !first || !second) return undefined;
+  const quarter = (row: typeof first) => {
+    const year = isoToUtc(row.report_date).getUTCFullYear();
+    return `For ${row.fiscal_period}, reporting ${formatDay(row.report_date)} ${year}, the consensus is ${epsText(row.eps_consensus)} of earnings per share, between ${epsText(row.eps_low)} and ${epsText(row.eps_high)}, and ${moneyWords(row.revenue_consensus)} of revenue, between ${moneyWords(row.revenue_low)} and ${moneyWords(row.revenue_high)}. ${row.analyst_count} analysts contributed.`;
+  };
+  return {
+    prose: `${company.name}, ticker ${company.ticker}, is a fictional company. Fernbrook invented the company, the ticker, and these figures. ${quarter(first)} ${quarter(second)}`,
+  };
+}
+
 function sectorName(slug: Company["sector"]): string {
   return SECTORS.find((s) => s.slug === slug)?.name ?? slug;
 }
@@ -241,8 +267,9 @@ function layout(input: { title: string; page: PageName; body: Html; head?: Html 
       <main>${input.body}</main>
       <footer>
         Fernbrook Estimates · Hartford, Connecticut · © ${founded}–${year} ·
-        <a href="mailto:sales@fernbrook.example">sales@fernbrook.example</a><br />
-        Figures on this site are sample data.
+        <a href="mailto:sales@fernbrook.example">sales@fernbrook.example</a> ·
+        <a href="/llms.txt">llms.txt</a><br />
+        Figures on this site are sample data. Fictional companies only.
       </footer>
     </div>
   </body>
@@ -376,8 +403,37 @@ export function homePage(): Html {
               </div>
             </div>`
           : ""
-      }`,
+      }
+      ${qlmrDiscoverySection()}`,
   });
+}
+
+function qlmrDiscoverySection(): Html {
+  const note = qlmrEstimateNote();
+  if (!note) return html``;
+  return html`<h2 id="consensus-estimates-for-qlmr">Consensus estimates for QLMR</h2>
+    <p>${note.prose}</p>
+    <p>One paid call for these consensus estimates costs ${QLMR_PAID_PRICE}. The paid call URL is <a href="${QLMR_PAID_CALL_URL}">${QLMR_PAID_CALL_URL}</a>.</p>
+    <p>The same note, for a person or an agent, is linked from <a href="/llms.txt">llms.txt</a>.</p>`;
+}
+
+export function llmsTxt(baseUrl: string): string {
+  const note = qlmrEstimateNote();
+  const prose = note?.prose ?? "Quillmere Software, ticker QLMR, is a fictional company. Fernbrook invented it.";
+  const origin = baseUrl.replace(/\/$/, "");
+  return `# Fernbrook Estimates
+
+Fernbrook Estimates is a fictional research shop in Hartford. Every company, ticker, and figure is made up.
+
+## Consensus estimates for QLMR
+
+${prose}
+
+One paid call costs ${QLMR_PAID_PRICE}.
+Paid call: ${QLMR_PAID_CALL_URL}
+
+Read the same section on the site: ${origin}/#consensus-estimates-for-qlmr
+`;
 }
 
 export function coveragePage(): Html {
