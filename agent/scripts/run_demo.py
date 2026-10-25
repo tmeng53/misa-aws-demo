@@ -106,27 +106,36 @@ def main() -> int:
     parser.add_argument("--local", action="store_true", help="call `agentcore dev` on localhost instead")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"))
+    parser.add_argument(
+        "--xrp",
+        action="store_true",
+        help="the runtime pays in XRP from its own wallet (XRPL_PAYMENTS=1): no AgentCore payment session",
+    )
     args = parser.parse_args()
 
     state = load_state()
-    manager_arn = os.environ.get("PAYMENT_MANAGER_ARN") or state.get("payment_manager_arn")
-    instrument_id = os.environ.get("PAYMENT_INSTRUMENT_ID") or state.get("payment_instrument_id")
-    user_id = state.get("payment_user_id", "demo-buyer")
-    if not manager_arn or not instrument_id:
-        print("run scripts/setup_wallet.py first", file=sys.stderr)
-        return 2
+    headers = {}
+    if args.xrp:
+        print("Paying in XRP held in escrow, from the agent's own XRPL testnet wallet\n")
+    else:
+        manager_arn = os.environ.get("PAYMENT_MANAGER_ARN") or state.get("payment_manager_arn")
+        instrument_id = os.environ.get("PAYMENT_INSTRUMENT_ID") or state.get("payment_instrument_id")
+        user_id = state.get("payment_user_id", "demo-buyer")
+        if not manager_arn or not instrument_id:
+            print("run scripts/setup_wallet.py first, or pass --xrp", file=sys.stderr)
+            return 2
 
-    manager = PaymentManager(payment_manager_arn=manager_arn, region_name=args.region)
-    session = manager.create_payment_session(
-        user_id=user_id,
-        limits={"maxSpendAmount": {"value": args.budget, "currency": "USD"}},
-        expiry_time_in_minutes=args.minutes,
-    )
-    session_id = session["paymentSessionId"]
-    print(f"Budget for this task: ${args.budget} (expires in {args.minutes} min)\n")
+        manager = PaymentManager(payment_manager_arn=manager_arn, region_name=args.region)
+        session = manager.create_payment_session(
+            user_id=user_id,
+            limits={"maxSpendAmount": {"value": args.budget, "currency": "USD"}},
+            expiry_time_in_minutes=args.minutes,
+        )
+        session_id = session["paymentSessionId"]
+        print(f"Budget for this task: ${args.budget} (expires in {args.minutes} min)\n")
+        headers = {PREFIX + "Payment-Session-Id": session_id, PREFIX + "Payment-Instrument-Id": instrument_id}
     print(f"Question: {args.prompt}\n")
 
-    headers = {PREFIX + "Payment-Session-Id": session_id, PREFIX + "Payment-Instrument-Id": instrument_id}
     if args.local:
         stream = invoke_local(args.port, args.prompt, headers)
     else:
@@ -138,6 +147,9 @@ def main() -> int:
     for event in stream:
         render(event)
 
+    if args.xrp:
+        print("\n")
+        return 0
     after = manager.get_payment_session(user_id=user_id, payment_session_id=session_id)
     left = Decimal(after["availableLimits"]["availableSpendAmount"]["value"])
     print(f"\n\nSpent ${Decimal(args.budget) - left} of ${args.budget}. Left in this session: ${left}.")
